@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!vercel.env.example
+
+# arquivo preenchido para importar na Vercel (contém segredos)
+vercel.env
 
 # credentials / sensitive local files
 senha email.txt

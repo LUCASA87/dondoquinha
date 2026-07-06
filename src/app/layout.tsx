@@ -17,6 +17,11 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: "Dondoquinha | Gestão Comercial",
   description: "Sistema de gestão comercial e financeira - Dondoquinha Moda e Beleza",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({

@@ -37,6 +37,8 @@ AUTH_SECRET=uma-chave-longa-e-aleatoria
 
 O `AUTH_SECRET` pode ser qualquer texto longo e aleatório (ex.: gere com `openssl rand -hex 32`).
 
+**Deploy na Vercel:** use o arquivo `vercel.env.example` — copie para `vercel.env`, preencha os dados do Supabase e importe em **Settings → Environment Variables → Import .env**.
+
 ### 3. Rodar localmente
 
 ```bash
