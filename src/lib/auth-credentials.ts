@@ -46,10 +46,14 @@ export async function validateStoredCredentials(
   }
 }
 
-export async function updateStoredPassword(
+export async function preparePasswordChange(
   currentPassword: string,
-  newPassword: string
-): Promise<{ error?: string; success?: boolean }> {
+  newPassword: string,
+  storedHash?: string | null
+): Promise<
+  | { error: string }
+  | { success: true; senha_hash: string; usuario: string }
+> {
   const atual = currentPassword.trim();
   const nova = newPassword.trim();
 
@@ -61,18 +65,59 @@ export async function updateStoredPassword(
     return { error: "A nova senha deve ser diferente da atual." };
   }
 
-  const valid = await validateStoredCredentials(getDefaultUsername(), atual);
+  const valid = await validateCurrentPassword(atual, storedHash);
   if (!valid) {
     return { error: "Senha atual incorreta." };
   }
 
+  const senha_hash = await hashPassword(nova);
+  return {
+    success: true,
+    senha_hash,
+    usuario: getDefaultUsername(),
+  };
+}
+
+async function validateCurrentPassword(
+  password: string,
+  storedHash?: string | null
+): Promise<boolean> {
+  const normalizedPass = password.trim();
+
+  if (normalizedPass === getDefaultPassword()) {
+    return true;
+  }
+
+  if (storedHash !== undefined) {
+    if (!storedHash) return false;
+    return verifyPassword(normalizedPass, storedHash);
+  }
+
+  try {
+    const hash = await fetchStoredHash();
+    if (!hash) return false;
+    return verifyPassword(normalizedPass, hash);
+  } catch {
+    return false;
+  }
+}
+
+/** @deprecated Use preparePasswordChange + gravação no cliente */
+export async function updateStoredPassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<{ error?: string; success?: boolean }> {
+  const prepared = await preparePasswordChange(currentPassword, newPassword);
+  if ("error" in prepared) {
+    return { error: prepared.error };
+  }
+
   try {
     const supabase = getSupabase();
-    const senha_hash = await hashPassword(nova);
     const { error } = await supabase.from("app_credenciais").upsert({
       id: 1,
-      usuario: getDefaultUsername(),
-      senha_hash,
+      usuario: prepared.usuario,
+      senha_hash: prepared.senha_hash,
       updated_at: new Date().toISOString(),
     });
 

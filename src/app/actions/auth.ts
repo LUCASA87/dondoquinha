@@ -6,9 +6,10 @@ import {
   setSessionCookie,
 } from "@/lib/auth";
 import {
-  updateStoredPassword,
+  preparePasswordChange,
   validateStoredCredentials,
 } from "@/lib/auth-credentials";
+import { isAuthenticated } from "@/lib/auth";
 
 export async function loginAction(formData: FormData) {
   const username = String(formData.get("username") ?? "");
@@ -24,9 +25,14 @@ export async function loginAction(formData: FormData) {
 
 export async function changePasswordAction(
   currentPassword: string,
-  newPassword: string
+  newPassword: string,
+  storedHash?: string | null
 ) {
-  return updateStoredPassword(currentPassword, newPassword);
+  if (!(await isAuthenticated())) {
+    return { error: "Sessão expirada. Entre novamente." };
+  }
+
+  return preparePasswordChange(currentPassword, newPassword, storedHash);
 }
 
 export async function logoutAction() {

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
 import { changePasswordAction } from "@/app/actions/auth";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -91,15 +92,63 @@ export function TrocarSenhaDialog() {
     }
 
     startTransition(async () => {
-      const result = await changePasswordAction(senhaAtual, senhaNova);
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
+      try {
+        const supabase = createClient();
+        const { data: credenciais, error: fetchError } = await supabase
+          .from("app_credenciais")
+          .select("senha_hash")
+          .eq("id", 1)
+          .maybeSingle();
 
-      toast("Senha alterada com sucesso.", "success");
-      resetForm();
-      setOpen(false);
+        if (fetchError) {
+          if (fetchError.message.includes("app_credenciais")) {
+            setError(
+              "Tabela de senhas não encontrada. Rode a migration 008 no Supabase."
+            );
+          } else {
+            setError(fetchError.message);
+          }
+          return;
+        }
+
+        const result = await changePasswordAction(
+          senhaAtual,
+          senhaNova,
+          credenciais?.senha_hash ?? null
+        );
+        if ("error" in result && result.error) {
+          setError(result.error);
+          return;
+        }
+        if (!("success" in result) || !result.success) {
+          setError("Não foi possível alterar a senha.");
+          return;
+        }
+
+        const { error: dbError } = await supabase.from("app_credenciais").upsert({
+          id: 1,
+          usuario: result.usuario,
+          senha_hash: result.senha_hash,
+          updated_at: new Date().toISOString(),
+        });
+
+        if (dbError) {
+          if (dbError.message.includes("app_credenciais")) {
+            setError(
+              "Tabela de senhas não encontrada. Rode a migration 008 no Supabase."
+            );
+          } else {
+            setError(dbError.message);
+          }
+          return;
+        }
+
+        toast("Senha alterada com sucesso.", "success");
+        resetForm();
+        setOpen(false);
+      } catch {
+        setError("Falha de conexão. Verifique a internet e tente novamente.");
+      }
     });
   }
 
