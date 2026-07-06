@@ -3,15 +3,15 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Dondoquinha Gestão",
+    name: "Dondoquinha",
     short_name: "Dondoquinha",
     description: "Sistema de gestão comercial e financeira - Dondoquinha Moda e Beleza",
-    start_url: "/login",
+    start_url: "/",
     scope: "/",
     display: "standalone",
-    orientation: "portrait",
-    background_color: "#faf6f0",
-    theme_color: "#7f1d1d",
+    orientation: "any",
+    background_color: "#ffffff",
+    theme_color: "#ffffff",
     lang: "pt-BR",
     categories: ["business", "finance"],
     icons: [
@@ -32,12 +32,6 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
-      },
-      {
-        src: "/logo.png",
-        sizes: "768x768",
-        type: "image/png",
-        purpose: "any",
       },
     ],
   };

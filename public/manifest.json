@@ -1,0 +1,30 @@
+{
+  "background_color": "#ffffff",
+  "description": "Sistema de gestão comercial e financeira - Dondoquinha Moda e Beleza",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "Dondoquinha",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "Dondoquinha",
+  "start_url": "/",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "type": "image/x-icon",
+      "sizes": "256x256"
+    },
+    {
+      "src": "/icon.png",
+      "type": "image/png",
+      "sizes": "32x32"
+    },
+    {
+      "src": "/apple-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    }
+  ]
+}
+
