@@ -1,27 +1,23 @@
+import { getDashboardStats } from "@/lib/queries/dashboard";
+import {
+  getTotalAReceber,
+  getParcelasAVencer,
+  getContasAPagar,
+} from "@/app/actions/financeiro";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { ParcelasAVencer } from "@/components/dashboard/parcelas-a-vencer";
 import { NovaCompraButton } from "@/components/dashboard/nova-compra-button";
-import { getDashboardStats } from "@/lib/queries/dashboard";
-import {
-  getTotalBoletosMesAtual,
-  getResumoFaturasCartao,
-  getTotalAReceber,
-  getParcelasAVencer,
-} from "@/app/actions/financeiro";
 
 export default async function DashboardPage() {
-  const [stats, totalBoletosMes, resumoCartoes, totalAReceber, parcelasAVencer] =
-    await Promise.all([
+  const [stats, contas, totalAReceber, parcelasAVencer] = await Promise.all([
     getDashboardStats(),
-    getTotalBoletosMesAtual(),
-    getResumoFaturasCartao(),
+    getContasAPagar(),
     getTotalAReceber(),
     getParcelasAVencer(),
   ]);
 
-  const totalCartaoMes = resumoCartoes.reduce((sum, r) => sum + r.total, 0);
-  const totalAPagar = totalBoletosMes + totalCartaoMes;
+  const totalAPagar = contas.reduce((sum, c) => sum + Number(c.valor), 0);
 
   return (
     <div className="space-y-4">

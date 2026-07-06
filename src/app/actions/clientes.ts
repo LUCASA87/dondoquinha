@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateClientes } from "@/lib/revalidate-app";
 import { createClient } from "@/lib/supabase/server";
 
 export async function createCliente(formData: FormData) {
@@ -15,8 +15,7 @@ export async function createCliente(formData: FormData) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/clientes");
-  revalidatePath("/vendas");
+  revalidateClientes();
   return { success: true };
 }
 
@@ -35,8 +34,7 @@ export async function updateCliente(id: string, formData: FormData) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/clientes");
-  revalidatePath("/vendas");
+  revalidateClientes();
   return { success: true };
 }
 
@@ -47,7 +45,7 @@ export async function deleteCliente(id: string) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/clientes");
+  revalidateClientes();
   return { success: true };
 }
 

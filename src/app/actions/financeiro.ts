@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateFinanceiro } from "@/lib/revalidate-app";
 import type { LinhaRelatorioConta } from "@/lib/relatorio-contas-pagar-pdf";
 import { createClient } from "@/lib/supabase/server";
 import type { ComprovantePagamentoData } from "@/lib/store";
@@ -140,10 +140,7 @@ export async function registrarPagamentoCrediario(data: {
   const itensRows = await buscarItensVendas(supabase, [venda.id]);
   const itens = mapItensComprovante(itensRows);
 
-  revalidatePath("/financeiro");
-  revalidatePath("/vendas");
-  revalidatePath("/clientes");
-  revalidatePath("/dashboard");
+  revalidateFinanceiro();
 
   const comprovante: ComprovantePagamentoData = {
     numeroPedido,
@@ -229,10 +226,7 @@ export async function excluirParcelaCrediario(parcelaId: string) {
       .eq("id", vendaId);
   }
 
-  revalidatePath("/financeiro");
-  revalidatePath("/vendas");
-  revalidatePath("/clientes");
-  revalidatePath("/dashboard");
+  revalidateFinanceiro();
 
   return { success: true };
 }
@@ -328,14 +322,6 @@ export async function getDebitoCliente(clienteId: string): Promise<ClienteDebito
   const produtosPorVenda = agruparNomesItensPorVenda(itensRows);
 
   for (const venda of vendas ?? []) {
-    const pago = await getTotalPagoVenda(supabase, venda.id);
-    const valorTotal = Number(venda.valor_total);
-    const saldo = Math.max(0, valorTotal - pago);
-
-    totalCompras += valorTotal;
-    totalPago += pago;
-    totalDevido += saldo;
-
     const parcelasRaw = (venda.parcelas_vendas ?? []) as Array<{
       id: string;
       venda_id: string;
@@ -345,6 +331,17 @@ export async function getDebitoCliente(clienteId: string): Promise<ClienteDebito
       data_vencimento: string;
       status: string;
     }>;
+
+    const pago = parcelasRaw.reduce(
+      (sum, p) => sum + Number(p.valor_pago ?? 0),
+      0
+    );
+    const valorTotal = Number(venda.valor_total);
+    const saldo = Math.max(0, valorTotal - pago);
+
+    totalCompras += valorTotal;
+    totalPago += pago;
+    totalDevido += saldo;
 
     const parcelas = parcelasRaw
       .sort((a, b) => a.numero_parcela - b.numero_parcela)
@@ -403,20 +400,52 @@ export async function buscarClientesComSaldo(termo: string) {
   }
 
   const { data: clientes, error } = await query;
-  if (error || !clientes) return [];
+  if (error || !clientes?.length) return [];
 
-  const resultado = [];
-  for (const c of clientes) {
-    const debito = await getDebitoCliente(c.id);
-    resultado.push({
+  const clienteIds = clientes.map((c) => c.id);
+  const { data: vendas } = await supabase
+    .from("vendas")
+    .select("id, cliente_id")
+    .in("cliente_id", clienteIds);
+
+  const vendaIds = (vendas ?? []).map((v) => v.id);
+  if (vendaIds.length === 0) {
+    return clientes.map((c) => ({
       id: c.id,
       nome: c.nome,
       cpf: c.cpf,
-      totalDevido: debito?.totalDevido ?? 0,
-    });
+      totalDevido: 0,
+    }));
   }
 
-  return resultado;
+  const { data: parcelas } = await supabase
+    .from("parcelas_vendas")
+    .select("venda_id, valor_parcela, valor_pago")
+    .in("venda_id", vendaIds);
+
+  const vendaPorCliente = new Map(
+    (vendas ?? []).map((v) => [v.id, v.cliente_id as string])
+  );
+  const devidoPorCliente = new Map<string, number>();
+
+  for (const parcela of parcelas ?? []) {
+    const saldo =
+      Number(parcela.valor_parcela) - Number(parcela.valor_pago ?? 0);
+    if (saldo <= 0.001) continue;
+    const clienteId = vendaPorCliente.get(parcela.venda_id);
+    if (!clienteId) continue;
+    devidoPorCliente.set(
+      clienteId,
+      (devidoPorCliente.get(clienteId) ?? 0) + saldo
+    );
+  }
+
+  return clientes.map((c) => ({
+    id: c.id,
+    nome: c.nome,
+    cpf: c.cpf,
+    totalDevido: devidoPorCliente.get(c.id) ?? 0,
+  }));
 }
 
 export async function getTotalAReceber() {
@@ -472,12 +501,15 @@ export async function createContaAPagar(formData: FormData) {
     });
   }
 
-  const { error } = await supabase.from("contas_a_pagar").insert(registros);
+  const { data: inseridas, error } = await supabase
+    .from("contas_a_pagar")
+    .insert(registros)
+    .select();
 
   if (error) return { error: error.message };
 
-  revalidatePath("/financeiro");
-  return { success: true };
+  revalidateFinanceiro();
+  return { success: true, contas: inseridas ?? [] };
 }
 
 export async function darBaixaConta(id: string) {
@@ -491,7 +523,7 @@ export async function darBaixaConta(id: string) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/financeiro");
+  revalidateFinanceiro();
   return { success: true };
 }
 
@@ -773,7 +805,7 @@ export async function createCartao(formData: FormData) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/financeiro");
+  revalidateFinanceiro();
   return { success: true, cartao: data };
 }
 
@@ -784,7 +816,7 @@ export async function deleteCartao(id: string) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/financeiro");
+  revalidateFinanceiro();
   return { success: true };
 }
 
@@ -837,7 +869,7 @@ export async function createFaturaCartao(data: {
     });
   }
 
-  revalidatePath("/financeiro");
+  revalidateFinanceiro();
   return { success: true };
 }
 
@@ -893,6 +925,6 @@ export async function darBaixaFatura(id: string) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/financeiro");
+  revalidateFinanceiro();
   return { success: true };
 }

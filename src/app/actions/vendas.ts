@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateVendas } from "@/lib/revalidate-app";
 import { createClient } from "@/lib/supabase/server";
 import { formatItemNome } from "@/lib/format";
 import { montarComprovanteVenda } from "@/lib/comprovante-venda-data";
@@ -69,21 +69,35 @@ export async function createVenda(data: {
   const { error: itensError } = await supabase.from("venda_itens").insert(itensInsert);
   if (itensError) return { error: itensError.message };
 
-  for (const item of data.itens) {
-    if (!item.produto_id) continue;
+  const produtoIds = [
+    ...new Set(data.itens.map((i) => i.produto_id).filter(Boolean) as string[]),
+  ];
 
-    const { data: produto } = await supabase
+  if (produtoIds.length > 0) {
+    const { data: produtos } = await supabase
       .from("produtos")
-      .select("quantidade")
-      .eq("id", item.produto_id)
-      .single();
+      .select("id, quantidade")
+      .in("id", produtoIds);
 
-    if (produto) {
-      await supabase
-        .from("produtos")
-        .update({ quantidade: produto.quantidade - item.quantidade })
-        .eq("id", item.produto_id);
+    const qtdPorProduto = new Map<string, number>();
+    for (const item of data.itens) {
+      if (!item.produto_id) continue;
+      qtdPorProduto.set(
+        item.produto_id,
+        (qtdPorProduto.get(item.produto_id) ?? 0) + item.quantidade
+      );
     }
+
+    await Promise.all(
+      (produtos ?? []).map((produto) => {
+        const baixar = qtdPorProduto.get(produto.id) ?? 0;
+        if (baixar < 1) return Promise.resolve();
+        return supabase
+          .from("produtos")
+          .update({ quantidade: produto.quantidade - baixar })
+          .eq("id", produto.id);
+      })
+    );
   }
 
   const valorParcela = Math.round((valor_total / parcelas) * 100) / 100;
@@ -116,10 +130,7 @@ export async function createVenda(data: {
 
   await supabase.from("parcelas_vendas").insert(parcelasInsert);
 
-  revalidatePath("/vendas");
-  revalidatePath("/financeiro");
-  revalidatePath("/dashboard");
-  revalidatePath("/estoque");
+  revalidateVendas();
 
   const comprovante = montarComprovanteVenda({
     vendaId: venda.id,

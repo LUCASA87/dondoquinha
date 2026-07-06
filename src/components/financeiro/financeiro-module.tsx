@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { FileDown, Loader2, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,7 +39,7 @@ import { SelecaoBotoes, OPCOES_PARCELAS } from "@/components/ui/selecao-botoes";
 import { InputMoeda } from "@/components/ui/input-moeda";
 import { baixarRelatorioContasPDF } from "@/lib/relatorio-contas-pagar-pdf";
 import { formatCurrency, formatDate, formatMesAno } from "@/lib/format";
-import type { ParcelaVenda, ContaAPagar, ClienteComSaldo } from "@/types/database";
+import type { ParcelaVenda, ContaAPagar } from "@/types/database";
 
 const LIMITE_CONTAS_PAGINA = 5;
 
@@ -52,18 +51,15 @@ const RELATORIOS_PAGAR: { id: PeriodoRelatorioContas; label: string }[] = [
 
 interface FinanceiroModuleProps {
   parcelas: (ParcelaVenda & { saldo_parcela: number })[];
-  clientesComSaldo: ClienteComSaldo[];
   contas: ContaAPagar[];
   totalAPagarMes: number;
 }
 
 export function FinanceiroModule({
   parcelas,
-  clientesComSaldo,
   contas: initialContas,
   totalAPagarMes,
 }: FinanceiroModuleProps) {
-  const router = useRouter();
   const { toast } = useAppMessages();
   const [contas, setContas] = useState(initialContas);
   const [dialogContaAberto, setDialogContaAberto] = useState(false);
@@ -95,7 +91,6 @@ export function FinanceiroModule({
       }
       setContas((prev) => prev.filter((c) => c.id !== id));
       toast("Conta paga. Saiu da lista.", "success");
-      router.refresh();
     });
   }
 
@@ -135,7 +130,7 @@ export function FinanceiroModule({
 
         <TabsContent value="receber" className="space-y-4">
           <RelatorioCrediarioRecebido />
-          <ConsultaClienteDebito clientesIniciais={clientesComSaldo} />
+          <ConsultaClienteDebito />
           <CrediarioReceber parcelas={parcelas} />
         </TabsContent>
 
@@ -194,9 +189,15 @@ export function FinanceiroModule({
                     <DialogTitle>Cadastrar Conta a Pagar</DialogTitle>
                   </DialogHeader>
                   <ContaForm
-                    onSucesso={() => {
+                    onSucesso={(novasContas) => {
                       setDialogContaAberto(false);
-                      router.refresh();
+                      if (novasContas.length > 0) {
+                        setContas((prev) =>
+                          [...prev, ...novasContas].sort((a, b) =>
+                            a.data_vencimento.localeCompare(b.data_vencimento)
+                          )
+                        );
+                      }
                     }}
                   />
                 </DialogContent>
@@ -279,7 +280,11 @@ export function FinanceiroModule({
   );
 }
 
-function ContaForm({ onSucesso }: { onSucesso: () => void }) {
+function ContaForm({
+  onSucesso,
+}: {
+  onSucesso: (contas: ContaAPagar[]) => void;
+}) {
   const [parcelas, setParcelas] = useState(1);
   const [valor, setValor] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -309,7 +314,7 @@ function ContaForm({ onSucesso }: { onSucesso: () => void }) {
       setValor(0);
       setParcelas(1);
       setError(null);
-      onSucesso();
+      onSucesso(result.contas ?? []);
     });
   }
 

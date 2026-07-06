@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { DollarSign, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,8 +43,8 @@ interface CrediarioReceberProps {
 const LIMITE_PARCELAS_PAGINA = 5;
 
 export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceberProps) {
-  const router = useRouter();
   const { confirm, toast } = useAppMessages();
+  const [parcelas, setParcelas] = useState(initialParcelas);
   const [paginaParcelas, setPaginaParcelas] = useState(1);
   const [showPagamento, setShowPagamento] = useState(false);
   const [parcelaSelecionadaId, setParcelaSelecionadaId] = useState<string | null>(null);
@@ -56,16 +55,20 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
   const [showComprovante, setShowComprovante] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const parcelasPagaveis = filtrarParcelasPagaveis(initialParcelas);
+  useEffect(() => {
+    setParcelas(initialParcelas);
+  }, [initialParcelas]);
+
+  const parcelasPagaveis = filtrarParcelasPagaveis(parcelas);
   const parcelaSelecionada = parcelasPagaveis.find((p) => p.id === parcelaSelecionadaId) ?? null;
 
   const totalPaginas = Math.max(
     1,
-    Math.ceil(initialParcelas.length / LIMITE_PARCELAS_PAGINA)
+    Math.ceil(parcelas.length / LIMITE_PARCELAS_PAGINA)
   );
   const paginaAtual = Math.min(paginaParcelas, totalPaginas);
   const inicioParcelas = (paginaAtual - 1) * LIMITE_PARCELAS_PAGINA;
-  const parcelasVisiveis = initialParcelas.slice(
+  const parcelasVisiveis = parcelas.slice(
     inicioParcelas,
     inicioParcelas + LIMITE_PARCELAS_PAGINA
   );
@@ -104,9 +107,12 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
     }
 
     startTransition(async () => {
+      const parcelaId = parcelaSelecionada.id;
+      const valor = valorPago;
+
       const result = await registrarPagamentoCrediario({
-        parcela_id: parcelaSelecionada.id,
-        valor_pago: valorPago,
+        parcela_id: parcelaId,
+        valor_pago: valor,
         obs: obs.trim() || undefined,
       });
 
@@ -120,8 +126,23 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
         setShowComprovante(true);
       }
 
+      setParcelas((prev) =>
+        prev
+          .map((p) => {
+            if (p.id !== parcelaId) return p;
+            const novoPago = Number(p.valor_pago ?? 0) + valor;
+            const saldo = Number(p.valor_parcela) - novoPago;
+            if (saldo <= 0.001) return null;
+            return {
+              ...p,
+              valor_pago: novoPago,
+              saldo_parcela: saldo,
+            };
+          })
+          .filter(Boolean) as ParcelaAberta[]
+      );
+
       fecharPagamento();
-      router.refresh();
     });
   }
 
@@ -144,7 +165,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
         return;
       }
       toast("Parcela excluída.", "success");
-      router.refresh();
+      setParcelas((prev) => prev.filter((item) => item.id !== p.id));
     });
   }
 
@@ -168,7 +189,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
           )}
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          {initialParcelas.length === 0 ? (
+          {parcelas.length === 0 ? (
             <p className="text-brand-black/50 py-6 text-center text-sm">
               Nenhuma parcela em aberto. 🎉
             </p>
@@ -271,7 +292,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                 </Table>
               </div>
 
-              {initialParcelas.length > LIMITE_PARCELAS_PAGINA && (
+              {parcelas.length > LIMITE_PARCELAS_PAGINA && (
                 <ListaPaginacao
                   paginaAtual={paginaAtual}
                   totalPaginas={totalPaginas}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Plus, Minus, ShoppingBag } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -51,7 +50,6 @@ interface CarrinhoItem {
 }
 
 export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) {
-  const router = useRouter();
   const [clienteId, setClienteId] = useState("");
   const [parcelas, setParcelas] = useState(1);
   const [obs, setObs] = useState("");
@@ -229,7 +227,6 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
         setPrecoManual(0);
         setQtdManual("1");
         setProdutoSelecionado("");
-        router.refresh();
       }
     });
   }

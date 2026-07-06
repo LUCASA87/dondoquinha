@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateEstoque } from "@/lib/revalidate-app";
 import { createClient } from "@/lib/supabase/server";
 import { formatItemNome } from "@/lib/format";
 
@@ -34,8 +34,7 @@ export async function createProduto(formData: FormData) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/estoque");
-  revalidatePath("/dashboard");
+  revalidateEstoque();
   return { success: true };
 }
 
@@ -55,8 +54,7 @@ export async function updateProduto(id: string, formData: FormData) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/estoque");
-  revalidatePath("/dashboard");
+  revalidateEstoque();
   return { success: true };
 }
 
@@ -67,8 +65,7 @@ export async function deleteProduto(id: string) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/estoque");
-  revalidatePath("/dashboard");
+  revalidateEstoque();
   return { success: true };
 }
 
