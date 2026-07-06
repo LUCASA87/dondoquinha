@@ -8,7 +8,6 @@ import {
 import {
   updateStoredPassword,
   validateStoredCredentials,
-  syncStoredPassword,
 } from "@/lib/auth-credentials";
 
 export async function loginAction(formData: FormData) {
@@ -20,7 +19,6 @@ export async function loginAction(formData: FormData) {
     return { error: "Usuário ou senha incorretos." };
   }
 
-  await syncStoredPassword(password);
   await setSessionCookie(username);
   redirect(redirectTo.startsWith("/") ? redirectTo : "/dashboard");
 }

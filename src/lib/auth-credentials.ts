@@ -9,32 +9,16 @@ export function getDefaultPassword(): string {
   return process.env.AUTH_PASSWORD?.trim() || "203189";
 }
 
-async function ensureCredentials() {
+async function fetchStoredHash(): Promise<string | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("app_credenciais")
-    .select("usuario, senha_hash")
+    .select("senha_hash")
     .eq("id", 1)
     .maybeSingle();
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (data) return data;
-
-  const senha_hash = await hashPassword(getDefaultPassword());
-  const { error: insertError } = await supabase.from("app_credenciais").insert({
-    id: 1,
-    usuario: getDefaultUsername(),
-    senha_hash,
-  });
-
-  if (insertError) {
-    throw new Error(insertError.message);
-  }
-
-  return { usuario: getDefaultUsername(), senha_hash };
+  if (error) throw new Error(error.message);
+  return data?.senha_hash ?? null;
 }
 
 export async function validateStoredCredentials(
@@ -48,30 +32,17 @@ export async function validateStoredCredentials(
     return false;
   }
 
-  try {
-    const creds = await ensureCredentials();
-    if (await verifyPassword(normalizedPass, creds.senha_hash)) {
-      return true;
-    }
-  } catch {
-    // Tabela ainda não criada ou erro de conexão — usa fallback abaixo
+  // Caminho rápido: sem Supabase e sem scrypt
+  if (normalizedPass === getDefaultPassword()) {
+    return true;
   }
 
-  return normalizedPass === getDefaultPassword();
-}
-
-export async function syncStoredPassword(password: string) {
   try {
-    const supabase = await createClient();
-    const senha_hash = await hashPassword(password.trim());
-    await supabase.from("app_credenciais").upsert({
-      id: 1,
-      usuario: getDefaultUsername(),
-      senha_hash,
-      updated_at: new Date().toISOString(),
-    });
+    const hash = await fetchStoredHash();
+    if (!hash) return false;
+    return verifyPassword(normalizedPass, hash);
   } catch {
-    // ignora se a tabela ainda não existir
+    return false;
   }
 }
 
@@ -90,22 +61,20 @@ export async function updateStoredPassword(
     return { error: "A nova senha deve ser diferente da atual." };
   }
 
-  try {
-    const creds = await ensureCredentials();
-    const valid = await verifyPassword(atual, creds.senha_hash);
-    if (!valid) {
-      return { error: "Senha atual incorreta." };
-    }
+  const valid = await validateStoredCredentials(getDefaultUsername(), atual);
+  if (!valid) {
+    return { error: "Senha atual incorreta." };
+  }
 
+  try {
     const supabase = await createClient();
     const senha_hash = await hashPassword(nova);
-    const { error } = await supabase
-      .from("app_credenciais")
-      .update({
-        senha_hash,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", 1);
+    const { error } = await supabase.from("app_credenciais").upsert({
+      id: 1,
+      usuario: getDefaultUsername(),
+      senha_hash,
+      updated_at: new Date().toISOString(),
+    });
 
     if (error) return { error: error.message };
     return { success: true };
