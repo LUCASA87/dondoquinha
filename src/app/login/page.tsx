@@ -1,6 +1,5 @@
 import Image from "next/image";
 import { LoginForm } from "@/components/auth/login-form";
-import { InstalarAppBanner } from "@/components/auth/instalar-app-banner";
 
 interface LoginPageProps {
   searchParams: Promise<{ redirect?: string }>;
@@ -31,7 +30,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </p>
         </div>
 
-        <InstalarAppBanner />
         <LoginForm redirectTo={redirectTo} />
       </div>
     </div>
