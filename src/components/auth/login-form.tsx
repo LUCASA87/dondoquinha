@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginAction } from "@/app/actions/auth";
 import { LoginLoadingOverlay } from "@/components/ui/brand-spinner";
+import { useAppMessages } from "@/components/ui/app-messages";
 import { fetchAllAppData } from "@/lib/queries/fetch-page-data";
+import {
+  isPasskeyLoginAvailable,
+  registerPasskeyOnDevice,
+} from "@/lib/passkey-client";
+import { platformAuthenticatorIsAvailable } from "@simplewebauthn/browser";
+import { LoginBiometria } from "@/components/auth/login-biometria";
 import "@/lib/queries/fetch-page-data";
 
 interface LoginFormProps {
@@ -17,9 +24,42 @@ interface LoginFormProps {
 
 export function LoginForm({ redirectTo }: LoginFormProps) {
   const router = useRouter();
+  const { confirm, toast } = useAppMessages();
   const [error, setError] = useState<string | null>(null);
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [carregando, setCarregando] = useState(false);
+  const [temBiometria, setTemBiometria] = useState(false);
+
+  useEffect(() => {
+    void isPasskeyLoginAvailable().then(setTemBiometria);
+  }, []);
+
+  async function oferecerLoginRapido() {
+    try {
+      const jaTemPasskey = await isPasskeyLoginAvailable();
+      if (jaTemPasskey) return;
+
+      const biometriaDisponivel = await platformAuthenticatorIsAvailable();
+      if (!biometriaDisponivel) return;
+
+      const ativar = await confirm({
+        title: "Login rápido neste celular",
+        message:
+          "Deseja ativar entrada com digital ou Face ID para os próximos acessos?",
+        confirmLabel: "Ativar",
+        cancelLabel: "Agora não",
+      });
+
+      if (!ativar) return;
+
+      await registerPasskeyOnDevice();
+      toast("Login rápido ativado neste aparelho.", "success");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Não foi possível ativar o login rápido.";
+      toast(message, "error");
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -41,6 +81,8 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
         return;
       }
 
+      await oferecerLoginRapido();
+
       router.push(destino);
       router.refresh();
     } catch {
@@ -52,6 +94,19 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   return (
     <>
       {carregando && <LoginLoadingOverlay />}
+
+      <LoginBiometria redirectTo={redirectTo} disabled={carregando} />
+
+      {temBiometria && (
+        <div className="relative my-5">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-brand-red/15" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase tracking-wider">
+            <span className="bg-white px-3 text-brand-black/45">ou entre com senha</span>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">

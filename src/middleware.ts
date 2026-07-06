@@ -4,6 +4,10 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth-session";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   if (pathname === "/login") {
     const token = request.cookies.get(SESSION_COOKIE)?.value;
     if (token && (await verifySessionToken(token))) {
@@ -26,6 +30,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next|favicon.ico|favicon-32.png|icon.png|apple-icon.png|logo.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next|api|favicon.ico|favicon-32.png|sw.js|icon.png|apple-icon.png|logo.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
