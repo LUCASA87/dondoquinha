@@ -1,11 +1,12 @@
 "use server";
 
+import { cache } from "react";
 import { revalidateEstoque } from "@/lib/revalidate-app";
-import { createClient } from "@/lib/supabase/server";
+import { getSupabase } from "@/lib/supabase/data";
 import { formatItemNome } from "@/lib/format";
 
 export async function createProduto(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = getSupabase();
   const nome = formatItemNome(formData.get("nome") as string);
 
   const { data: existente } = await supabase
@@ -39,7 +40,7 @@ export async function createProduto(formData: FormData) {
 }
 
 export async function updateProduto(id: string, formData: FormData) {
-  const supabase = await createClient();
+  const supabase = getSupabase();
 
   const { error } = await supabase
     .from("produtos")
@@ -59,7 +60,7 @@ export async function updateProduto(id: string, formData: FormData) {
 }
 
 export async function deleteProduto(id: string) {
-  const supabase = await createClient();
+  const supabase = getSupabase();
 
   const { error } = await supabase.from("produtos").delete().eq("id", id);
 
@@ -69,8 +70,8 @@ export async function deleteProduto(id: string) {
   return { success: true };
 }
 
-export async function getProdutos() {
-  const supabase = await createClient();
+export const getProdutos = cache(async () => {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from("produtos")
     .select("*")
@@ -78,4 +79,4 @@ export async function getProdutos() {
 
   if (error) return [];
   return data;
-}
+});

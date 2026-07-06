@@ -31,6 +31,15 @@ body {
   font-family: var(--font-inter), system-ui, sans-serif;
 }
 
+@keyframes navigation {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
 ::selection {
   background: rgb(165 28 48 / 0.18);
   color: var(--brand-black);

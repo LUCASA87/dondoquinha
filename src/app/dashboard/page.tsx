@@ -1,23 +1,27 @@
-import { getDashboardStats } from "@/lib/queries/dashboard";
-import {
-  getTotalAReceber,
-  getParcelasAVencer,
-  getContasAPagar,
-} from "@/app/actions/financeiro";
+"use client";
+
+import { useEffect, useState } from "react";
+import { fetchDashboardPageData } from "@/lib/queries/fetch-page-data";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { ParcelasAVencer } from "@/components/dashboard/parcelas-a-vencer";
 import { NovaCompraButton } from "@/components/dashboard/nova-compra-button";
+import { StatsCardsSkeleton, ParcelasSkeleton } from "@/components/ui/page-loading";
 
-export default async function DashboardPage() {
-  const [stats, contas, totalAReceber, parcelasAVencer] = await Promise.all([
-    getDashboardStats(),
-    getContasAPagar(),
-    getTotalAReceber(),
-    getParcelasAVencer(),
-  ]);
+export default function DashboardPage() {
+  const [data, setData] = useState<Awaited<ReturnType<typeof fetchDashboardPageData>> | null>(
+    null
+  );
 
-  const totalAPagar = contas.reduce((sum, c) => sum + Number(c.valor), 0);
+  useEffect(() => {
+    let cancelled = false;
+    fetchDashboardPageData().then((result) => {
+      if (!cancelled) setData(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -34,12 +38,22 @@ export default async function DashboardPage() {
           </div>
         }
       />
-      <StatsCards
-        initialStats={stats}
-        totalAPagar={totalAPagar}
-        totalAReceber={totalAReceber}
-      />
-      <ParcelasAVencer initialParcelas={parcelasAVencer} />
+
+      {!data ? (
+        <>
+          <StatsCardsSkeleton />
+          <ParcelasSkeleton />
+        </>
+      ) : (
+        <>
+          <StatsCards
+            initialStats={data.stats}
+            totalAPagar={data.totalAPagar}
+            totalAReceber={data.totalAReceber}
+          />
+          <ParcelasAVencer initialParcelas={data.parcelas} />
+        </>
+      )}
     </div>
   );
 }

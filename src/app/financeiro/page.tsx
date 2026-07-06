@@ -1,19 +1,31 @@
-import { getParcelasAbertas, getContasAPagar } from "@/app/actions/financeiro";
+"use client";
+
+import { useEffect, useState } from "react";
+import { fetchFinanceiroPageData } from "@/lib/queries/fetch-page-data";
 import { FinanceiroModule } from "@/components/financeiro/financeiro-module";
+import { PageLoading } from "@/components/ui/page-loading";
 
-export default async function FinanceiroPage() {
-  const [parcelas, contas] = await Promise.all([
-    getParcelasAbertas(),
-    getContasAPagar(),
-  ]);
+export default function FinanceiroPage() {
+  const [data, setData] = useState<Awaited<ReturnType<typeof fetchFinanceiroPageData>> | null>(
+    null
+  );
 
-  const totalAPagarMes = contas.reduce((sum, c) => sum + Number(c.valor), 0);
+  useEffect(() => {
+    let cancelled = false;
+    fetchFinanceiroPageData().then((result) => {
+      if (!cancelled) setData(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
+  if (!data) return <PageLoading />;
   return (
     <FinanceiroModule
-      parcelas={parcelas}
-      contas={contas}
-      totalAPagarMes={totalAPagarMes}
+      parcelas={data.parcelas}
+      contas={data.contas}
+      totalAPagarMes={data.totalAPagarMes}
     />
   );
 }

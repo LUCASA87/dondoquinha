@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getSupabase } from "@/lib/supabase/data";
 import { hashPassword, verifyPassword } from "@/lib/auth-password";
 
 export function getDefaultUsername(): string {
@@ -10,7 +10,7 @@ export function getDefaultPassword(): string {
 }
 
 async function fetchStoredHash(): Promise<string | null> {
-  const supabase = await createClient();
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from("app_credenciais")
     .select("senha_hash")
@@ -67,7 +67,7 @@ export async function updateStoredPassword(
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = getSupabase();
     const senha_hash = await hashPassword(nova);
     const { error } = await supabase.from("app_credenciais").upsert({
       id: 1,

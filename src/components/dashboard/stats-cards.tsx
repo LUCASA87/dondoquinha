@@ -121,7 +121,8 @@ export function StatsCards({
     const supabase = createClient();
     const { data } = await supabase
       .from("parcelas_vendas")
-      .select("valor_parcela, valor_pago");
+      .select("valor_parcela, valor_pago")
+      .eq("status", "pendente");
 
     if (!data) return;
 
@@ -143,9 +144,6 @@ export function StatsCards({
 
   useEffect(() => {
     const supabase = createClient();
-
-    fetchEstoque();
-    fetchAReceber();
 
     const channelEstoque = supabase
       .channel("dashboard-produtos")
@@ -174,18 +172,10 @@ export function StatsCards({
       )
       .subscribe();
 
-    function onFocus() {
-      fetchEstoque();
-      fetchAReceber();
-    }
-
-    window.addEventListener("focus", onFocus);
-
     return () => {
       supabase.removeChannel(channelEstoque);
       supabase.removeChannel(channelParcelas);
       supabase.removeChannel(channelPagamentos);
-      window.removeEventListener("focus", onFocus);
     };
   }, [fetchEstoque, fetchAReceber]);
 

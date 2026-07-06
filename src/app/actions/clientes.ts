@@ -1,10 +1,11 @@
 "use server";
 
+import { cache } from "react";
 import { revalidateClientes } from "@/lib/revalidate-app";
-import { createClient } from "@/lib/supabase/server";
+import { getSupabase } from "@/lib/supabase/data";
 
 export async function createCliente(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = getSupabase();
 
   const { error } = await supabase.from("clientes").insert({
     nome: formData.get("nome") as string,
@@ -20,7 +21,7 @@ export async function createCliente(formData: FormData) {
 }
 
 export async function updateCliente(id: string, formData: FormData) {
-  const supabase = await createClient();
+  const supabase = getSupabase();
 
   const { error } = await supabase
     .from("clientes")
@@ -39,7 +40,7 @@ export async function updateCliente(id: string, formData: FormData) {
 }
 
 export async function deleteCliente(id: string) {
-  const supabase = await createClient();
+  const supabase = getSupabase();
 
   const { error } = await supabase.from("clientes").delete().eq("id", id);
 
@@ -49,8 +50,8 @@ export async function deleteCliente(id: string) {
   return { success: true };
 }
 
-export async function getClientes() {
-  const supabase = await createClient();
+export const getClientes = cache(async () => {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from("clientes")
     .select("*")
@@ -58,4 +59,4 @@ export async function getClientes() {
 
   if (error) return [];
   return data;
-}
+});

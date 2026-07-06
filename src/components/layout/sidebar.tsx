@@ -13,11 +13,13 @@ import {
   X,
   LogOut,
 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { logoutAction } from "@/app/actions/auth";
 import { TrocarSenhaDialog } from "@/components/auth/trocar-senha-dialog";
+import { useNavigation } from "./navigation-context";
 
 const navItems = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard },
@@ -29,8 +31,19 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { startNavigation } = useNavigation();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    navItems.forEach(({ href }) => router.prefetch(href));
+  }, [router]);
+
+  function handleNavClick() {
+    startNavigation();
+    setOpen(false);
+  }
 
   function handleLogout() {
     startTransition(async () => {
@@ -65,7 +78,7 @@ export function Sidebar() {
         <div className="w-1 shrink-0 bg-brand-red absolute inset-y-0 left-0" aria-hidden />
 
         <div className="relative border-b-2 border-brand-red/20 bg-gradient-to-br from-brand-cream via-brand-cream/80 to-white px-6 py-5">
-          <Link href="/dashboard" className="flex items-center gap-3" onClick={() => setOpen(false)}>
+          <Link href="/dashboard" className="flex items-center gap-3" onClick={handleNavClick}>
             <Image
               src="/logo.png"
               alt="Dondoquinha Moda e Beleza"
@@ -97,7 +110,8 @@ export function Sidebar() {
               <Link
                 key={href}
                 href={href}
-                onClick={() => setOpen(false)}
+                prefetch
+                onClick={handleNavClick}
                 className={cn(
                   "flex items-center gap-3 rounded-xl px-4 py-3.5 text-base font-medium transition-all",
                   active

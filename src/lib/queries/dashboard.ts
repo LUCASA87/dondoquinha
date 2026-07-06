@@ -1,8 +1,8 @@
-import { createClient } from "@/lib/supabase/server";
+import { getSupabase } from "@/lib/supabase/data";
 import type { DashboardStats } from "@/types/database";
 
 export async function getDashboardStats(): Promise<DashboardStats> {
-  const supabase = await createClient();
+  const supabase = getSupabase();
   const { data, error } = await supabase.from("produtos").select("quantidade, preco_custo, preco_venda");
 
   if (error || !data) {

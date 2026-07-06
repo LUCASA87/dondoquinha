@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidateVendas } from "@/lib/revalidate-app";
-import { createClient } from "@/lib/supabase/server";
+import { getSupabase } from "@/lib/supabase/data";
 import { formatItemNome } from "@/lib/format";
 import { montarComprovanteVenda } from "@/lib/comprovante-venda-data";
 import type { ComprovanteVendaData } from "@/lib/store";
@@ -20,7 +20,7 @@ export async function createVenda(data: {
   obs?: string;
   itens: ItemVenda[];
 }) {
-  const supabase = await createClient();
+  const supabase = getSupabase();
 
   const valor_total = data.itens.reduce(
     (sum, item) => sum + item.quantidade * item.preco_unitario,
@@ -160,7 +160,7 @@ export async function createVenda(data: {
 export async function getUltimaVendaComprovante(
   clienteId: string
 ): Promise<{ comprovante: ComprovanteVendaData } | { error: string }> {
-  const supabase = await createClient();
+  const supabase = getSupabase();
 
   const { data: venda, error } = await supabase
     .from("vendas")
@@ -202,7 +202,7 @@ export async function getUltimaVendaComprovante(
 }
 
 export async function getVendas(limit = 5) {
-  const supabase = await createClient();
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from("vendas")
     .select("*, clientes(nome)")

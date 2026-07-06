@@ -25,14 +25,24 @@ function safeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-async function signPayload(payload: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
+let cachedSigningKey: CryptoKey | null = null;
+
+async function getSigningKey(): Promise<CryptoKey> {
+  if (cachedSigningKey) return cachedSigningKey;
+
+  cachedSigningKey = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(getAuthSecret()),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
+
+  return cachedSigningKey;
+}
+
+async function signPayload(payload: string): Promise<string> {
+  const key = await getSigningKey();
 
   const signature = await crypto.subtle.sign(
     "HMAC",
@@ -58,14 +68,14 @@ export async function verifySessionToken(token: string): Promise<boolean> {
     if (!encoded || !signature) return false;
 
     const payload = Buffer.from(encoded, "base64url").toString("utf8");
-    const expectedSignature = await signPayload(payload);
-
-    if (!safeEqual(signature, expectedSignature)) return false;
-
     const [username, expiresAtRaw] = payload.split(":");
     if (!username || !expiresAtRaw) return false;
     if (!safeEqual(username, getAuthUser())) return false;
     if (Date.now() > Number(expiresAtRaw)) return false;
+
+    const expectedSignature = await signPayload(payload);
+
+    if (!safeEqual(signature, expectedSignature)) return false;
 
     return true;
   } catch {

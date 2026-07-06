@@ -64,6 +64,7 @@ export function ParcelasAVencer({ initialParcelas }: ParcelasAVencerProps) {
     const { data } = await supabase
       .from("parcelas_vendas")
       .select("*, vendas(id, parcelas, clientes(id, nome, telefone))")
+      .eq("status", "pendente")
       .lte("data_vencimento", limiteStr)
       .order("data_vencimento");
 
@@ -78,9 +79,10 @@ export function ParcelasAVencer({ initialParcelas }: ParcelasAVencerProps) {
       .filter((p) => p.saldo_parcela > 0.001);
 
     const proximas = filtrarParcelasPagaveis(comSaldo);
-    const vendaIds = [
+    const vendaIdsVisiveis = [
       ...new Set(
         proximas
+          .slice(0, LIMITE_PARCELAS_DASHBOARD)
           .map((p) => {
             const venda = p.vendas as { id: string } | null;
             return venda?.id ?? p.venda_id;
@@ -88,7 +90,10 @@ export function ParcelasAVencer({ initialParcelas }: ParcelasAVencerProps) {
           .filter(Boolean)
       ),
     ] as string[];
-    const itensRows = await buscarItensVendas(supabase, vendaIds);
+    const itensRows =
+      vendaIdsVisiveis.length > 0
+        ? await buscarItensVendas(supabase, vendaIdsVisiveis)
+        : [];
     const produtosPorVenda = agruparNomesItensPorVenda(itensRows);
 
     setParcelas(
@@ -149,14 +154,8 @@ export function ParcelasAVencer({ initialParcelas }: ParcelasAVencerProps) {
       )
       .subscribe();
 
-    function onFocus() {
-      recarregar();
-    }
-    window.addEventListener("focus", onFocus);
-
     return () => {
       supabase.removeChannel(channel);
-      window.removeEventListener("focus", onFocus);
     };
   }, [recarregar]);
 
