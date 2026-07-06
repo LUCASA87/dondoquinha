@@ -35,6 +35,16 @@ export async function changePasswordAction(
   return preparePasswordChange(currentPassword, newPassword, storedHash);
 }
 
+/** Valida senha padrão do .env — sem crypto, seguro para Edge. */
+export async function checkDefaultPasswordAction(password: string) {
+  if (!(await isAuthenticated())) {
+    return { error: "Sessão expirada. Entre novamente." };
+  }
+
+  const { getDefaultPassword } = await import("@/lib/auth-credentials");
+  return { valid: password.trim() === getDefaultPassword() };
+}
+
 export async function logoutAction() {
   await clearSessionCookie();
   redirect("/login");

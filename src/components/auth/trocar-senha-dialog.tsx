@@ -2,8 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
-import { changePasswordAction } from "@/app/actions/auth";
+import { checkDefaultPasswordAction } from "@/app/actions/auth";
+import { hashPassword, verifyPassword } from "@/lib/auth-password";
 import { createClient } from "@/lib/supabase/client";
+import { LOJA } from "@/lib/store";
+import { formatConnectionError } from "@/lib/format-error";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -60,6 +63,40 @@ function CampoSenha({
   );
 }
 
+function mapSupabaseError(message: string): string {
+  if (message.includes("app_credenciais")) {
+    return "Tabela de senhas não encontrada. Rode a migration 008 no Supabase.";
+  }
+  return formatConnectionError(message);
+}
+
+async function validarSenhaAtual(
+  senhaAtual: string,
+  senhaHash: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (senhaHash) {
+    const valida = await verifyPassword(senhaAtual, senhaHash);
+    if (!valida) {
+      return { ok: false, error: "Senha atual incorreta." };
+    }
+    return { ok: true };
+  }
+
+  try {
+    const result = await checkDefaultPasswordAction(senhaAtual);
+    if ("error" in result && result.error) {
+      return { ok: false, error: result.error };
+    }
+    if (!result.valid) {
+      return { ok: false, error: "Senha atual incorreta." };
+    }
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro ao validar senha.";
+    return { ok: false, error: formatConnectionError(message) };
+  }
+}
+
 export function TrocarSenhaDialog() {
   const { toast } = useAppMessages();
   const [open, setOpen] = useState(false);
@@ -86,8 +123,21 @@ export function TrocarSenhaDialog() {
     e.preventDefault();
     setError(null);
 
-    if (senhaNova !== senhaConfirmar) {
+    const atual = senhaAtual.trim();
+    const nova = senhaNova.trim();
+
+    if (nova !== senhaConfirmar.trim()) {
       setError("A confirmação da nova senha não confere.");
+      return;
+    }
+
+    if (nova.length < 4) {
+      setError("A nova senha deve ter pelo menos 4 caracteres.");
+      return;
+    }
+
+    if (atual === nova) {
+      setError("A nova senha deve ser diferente da atual.");
       return;
     }
 
@@ -101,53 +151,36 @@ export function TrocarSenhaDialog() {
           .maybeSingle();
 
         if (fetchError) {
-          if (fetchError.message.includes("app_credenciais")) {
-            setError(
-              "Tabela de senhas não encontrada. Rode a migration 008 no Supabase."
-            );
-          } else {
-            setError(fetchError.message);
-          }
+          setError(mapSupabaseError(fetchError.message));
           return;
         }
 
-        const result = await changePasswordAction(
-          senhaAtual,
-          senhaNova,
-          credenciais?.senha_hash ?? null
-        );
-        if ("error" in result && result.error) {
-          setError(result.error);
-          return;
-        }
-        if (!("success" in result) || !result.success) {
-          setError("Não foi possível alterar a senha.");
+        const validacao = await validarSenhaAtual(atual, credenciais?.senha_hash ?? null);
+        if (!validacao.ok) {
+          setError(validacao.error);
           return;
         }
 
+        const senha_hash = await hashPassword(nova);
         const { error: dbError } = await supabase.from("app_credenciais").upsert({
           id: 1,
-          usuario: result.usuario,
-          senha_hash: result.senha_hash,
+          usuario: LOJA.nome.toLowerCase(),
+          senha_hash,
           updated_at: new Date().toISOString(),
         });
 
         if (dbError) {
-          if (dbError.message.includes("app_credenciais")) {
-            setError(
-              "Tabela de senhas não encontrada. Rode a migration 008 no Supabase."
-            );
-          } else {
-            setError(dbError.message);
-          }
+          setError(mapSupabaseError(dbError.message));
           return;
         }
 
         toast("Senha alterada com sucesso.", "success");
         resetForm();
         setOpen(false);
-      } catch {
-        setError("Falha de conexão. Verifique a internet e tente novamente.");
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao trocar senha.";
+        setError(formatConnectionError(message));
       }
     });
   }
