@@ -1,8 +1,12 @@
-import { registerServiceWorker } from "@/lib/pwa-utils";
-
 export interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
+declare global {
+  interface Window {
+    __DQ_PWA_PROMPT?: BeforeInstallPromptEvent;
+  }
 }
 
 const DISMISS_KEY = "dondoquinha_install_dismissed";
@@ -10,30 +14,43 @@ const DISMISS_KEY = "dondoquinha_install_dismissed";
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let listenerReady = false;
 
+function storePrompt(event: BeforeInstallPromptEvent) {
+  deferredPrompt = event;
+  if (typeof window !== "undefined") {
+    window.__DQ_PWA_PROMPT = event;
+  }
+  sessionStorage.removeItem(DISMISS_KEY);
+  window.dispatchEvent(new Event("dondoquinha-pwa-installable"));
+}
+
 export function initPwaInstallListener() {
   if (typeof window === "undefined" || listenerReady) return;
   listenerReady = true;
 
+  if (window.__DQ_PWA_PROMPT) {
+    storePrompt(window.__DQ_PWA_PROMPT);
+  }
+
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
-    deferredPrompt = event as BeforeInstallPromptEvent;
-    sessionStorage.removeItem(DISMISS_KEY);
-    window.dispatchEvent(new Event("dondoquinha-pwa-installable"));
+    storePrompt(event as BeforeInstallPromptEvent);
   });
 
   window.addEventListener("appinstalled", () => {
     deferredPrompt = null;
+    window.__DQ_PWA_PROMPT = undefined;
     sessionStorage.removeItem(DISMISS_KEY);
     window.dispatchEvent(new Event("dondoquinha-pwa-installed"));
   });
 }
 
 export function getDeferredInstallPrompt(): BeforeInstallPromptEvent | null {
-  return deferredPrompt;
+  return deferredPrompt ?? window.__DQ_PWA_PROMPT ?? null;
 }
 
 export function clearDeferredInstallPrompt() {
   deferredPrompt = null;
+  window.__DQ_PWA_PROMPT = undefined;
 }
 
 export function isInstallNotificationDismissed(): boolean {
@@ -47,7 +64,7 @@ export function dismissInstallNotification() {
 }
 
 export async function promptPwaInstall(): Promise<"accepted" | "dismissed" | "unavailable"> {
-  const prompt = deferredPrompt;
+  const prompt = getDeferredInstallPrompt();
   if (!prompt) return "unavailable";
 
   await prompt.prompt();
@@ -56,19 +73,19 @@ export async function promptPwaInstall(): Promise<"accepted" | "dismissed" | "un
   return outcome;
 }
 
-export async function waitForInstallPrompt(timeoutMs = 8000): Promise<boolean> {
-  if (deferredPrompt) return true;
+export async function waitForInstallPrompt(timeoutMs = 12000): Promise<boolean> {
+  if (getDeferredInstallPrompt()) return true;
 
   return new Promise((resolve) => {
     const timer = window.setTimeout(() => {
       window.removeEventListener("dondoquinha-pwa-installable", onReady);
-      resolve(Boolean(deferredPrompt));
+      resolve(Boolean(getDeferredInstallPrompt()));
     }, timeoutMs);
 
     function onReady() {
       window.clearTimeout(timer);
       window.removeEventListener("dondoquinha-pwa-installable", onReady);
-      resolve(Boolean(deferredPrompt));
+      resolve(Boolean(getDeferredInstallPrompt()));
     }
 
     window.addEventListener("dondoquinha-pwa-installable", onReady);
@@ -79,10 +96,11 @@ export async function waitForInstallPrompt(timeoutMs = 8000): Promise<boolean> {
 export async function runPwaInstall(): Promise<
   "installed" | "dismissed" | "unavailable"
 > {
+  const { registerServiceWorker } = await import("@/lib/pwa-utils");
   await registerServiceWorker();
 
-  if (!deferredPrompt) {
-    await waitForInstallPrompt(8000);
+  if (!getDeferredInstallPrompt()) {
+    await waitForInstallPrompt(12000);
   }
 
   const outcome = await promptPwaInstall();

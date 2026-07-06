@@ -41,6 +41,17 @@ export function getApkDownloadUrl(): string | null {
   return url || null;
 }
 
+export function isInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /FBAN|FBAV|Instagram|Line\/|WhatsApp|Twitter|wv\)/i.test(ua);
+}
+
+export function openInChrome(): void {
+  const url = window.location.href.replace(/^https?:\/\//, "");
+  window.location.href = `intent://${url}#Intent;scheme=https;package=com.android.chrome;end`;
+}
+
 export async function registerServiceWorker() {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
   try {

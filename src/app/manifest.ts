@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Dondoquinha Gestão",
     short_name: "Dondoquinha",
     description: "Sistema de gestão comercial e financeira - Dondoquinha Moda e Beleza",
-    start_url: "/login?source=pwa",
+    start_url: "/login",
     scope: "/",
     display: "standalone",
     orientation: "portrait",

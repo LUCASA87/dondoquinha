@@ -3,6 +3,8 @@ import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout/app-shell";
 import { PwaBootstrap } from "@/components/pwa/pwa-bootstrap";
+import { pwaHeadScript } from "@/lib/pwa-head-script";
+import Script from "next/script";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -39,6 +41,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className={`${inter.variable} ${playfair.variable} h-full`}>
+      <head>
+        <Script id="pwa-install-capture" strategy="beforeInteractive">
+          {pwaHeadScript}
+        </Script>
+      </head>
       <body className="min-h-full antialiased">
         <PwaBootstrap />
         <AppShell>{children}</AppShell>

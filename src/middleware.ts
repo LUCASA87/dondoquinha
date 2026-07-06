@@ -4,7 +4,11 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth-session";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname.startsWith("/api/")) {
+  if (
+    pathname.startsWith("/api/") ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/sw.js"
+  ) {
     return NextResponse.next();
   }
 
@@ -30,6 +34,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next|api|favicon.ico|favicon-32.png|sw.js|pwa-icon-192.png|pwa-icon-512.png|icon.png|apple-icon.png|logo.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next|api|manifest.webmanifest|favicon.ico|favicon-32.png|sw.js|pwa-icon-192.png|pwa-icon-512.png|icon.png|apple-icon.png|logo.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

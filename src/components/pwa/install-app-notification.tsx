@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
-import { Download, X } from "lucide-react";
+import { Download, ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAppMessages } from "@/components/ui/app-messages";
 import {
   dismissInstallNotification,
   getDeferredInstallPrompt,
@@ -15,13 +14,16 @@ import {
   getApkDownloadUrl,
   isAndroid,
   isAppInstalled,
+  isInAppBrowser,
   isMobileDevice,
+  openInChrome,
 } from "@/lib/pwa-utils";
 
 export function InstallAppNotification() {
-  const { toast } = useAppMessages();
   const [visivel, setVisivel] = useState(false);
   const [instalando, setInstalando] = useState(false);
+  const [pronto, setPronto] = useState(false);
+  const [inApp, setInApp] = useState(false);
 
   const atualizarVisibilidade = useCallback(() => {
     if (!isMobileDevice() || isAppInstalled()) {
@@ -29,10 +31,14 @@ export function InstallAppNotification() {
       return;
     }
 
-    const apkUrl = getApkDownloadUrl();
-    const podeInstalar = isAndroid() || Boolean(getDeferredInstallPrompt()) || Boolean(apkUrl);
+    const instalavel = Boolean(getDeferredInstallPrompt()) || Boolean(getApkDownloadUrl());
+    const android = isAndroid();
+    const navegadorEmbutido = isInAppBrowser();
 
-    if (!podeInstalar) {
+    setInApp(navegadorEmbutido);
+    setPronto(instalavel);
+
+    if (!android && !instalavel) {
       setVisivel(false);
       return;
     }
@@ -50,8 +56,14 @@ export function InstallAppNotification() {
     ] as const;
 
     eventos.forEach((evento) => window.addEventListener(evento, atualizarVisibilidade));
+
+    const timer = window.setInterval(atualizarVisibilidade, 2000);
+    const stop = window.setTimeout(() => window.clearInterval(timer), 30000);
+
     return () => {
       eventos.forEach((evento) => window.removeEventListener(evento, atualizarVisibilidade));
+      window.clearInterval(timer);
+      window.clearTimeout(stop);
     };
   }, [atualizarVisibilidade]);
 
@@ -60,6 +72,11 @@ export function InstallAppNotification() {
   const apkUrl = getApkDownloadUrl();
 
   async function handleInstalar() {
+    if (inApp) {
+      openInChrome();
+      return;
+    }
+
     if (apkUrl && !getDeferredInstallPrompt()) {
       window.location.href = apkUrl;
       return;
@@ -68,21 +85,13 @@ export function InstallAppNotification() {
     setInstalando(true);
     try {
       const resultado = await runPwaInstall();
-
       if (resultado === "installed") {
         setVisivel(false);
-        toast("Aplicativo instalado com sucesso.", "success");
         return;
       }
-
-      if (resultado === "dismissed") return;
-
-      toast(
-        "Instalador indisponível. Abra no Chrome do Android e tente novamente.",
-        "info"
-      );
     } finally {
       setInstalando(false);
+      atualizarVisibilidade();
     }
   }
 
@@ -90,6 +99,20 @@ export function InstallAppNotification() {
     dismissInstallNotification();
     setVisivel(false);
   }
+
+  const labelBotao = inApp
+    ? "Abrir no Chrome"
+    : instalando
+      ? "Abrindo..."
+      : pronto
+        ? "Instalar"
+        : "Instalar";
+
+  const subtitulo = inApp
+    ? "Abra no Chrome para instalar o aplicativo"
+    : pronto
+      ? "Toque para instalar o aplicativo"
+      : "Preparando instalador...";
 
   return (
     <div
@@ -108,7 +131,7 @@ export function InstallAppNotification() {
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-brand-black">Instale o Dondoquinha</p>
-          <p className="text-xs text-brand-black/55">Toque para instalar o aplicativo</p>
+          <p className="text-xs text-brand-black/55">{subtitulo}</p>
         </div>
 
         <Button
@@ -116,10 +139,14 @@ export function InstallAppNotification() {
           size="sm"
           className="shrink-0"
           onClick={handleInstalar}
-          disabled={instalando}
+          disabled={instalando || (!pronto && !inApp && !apkUrl)}
         >
-          <Download className="h-4 w-4" />
-          {instalando ? "..." : "Instalar"}
+          {inApp ? (
+            <ExternalLink className="h-4 w-4" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          {labelBotao}
         </Button>
 
         <button
