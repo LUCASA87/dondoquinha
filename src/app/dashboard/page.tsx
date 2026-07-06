@@ -10,7 +10,13 @@ import { PageHeader } from "@/components/layout/page-header";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { ParcelasAVencer } from "@/components/dashboard/parcelas-a-vencer";
 import { NovaCompraButton } from "@/components/dashboard/nova-compra-button";
-import { StatsCardsSkeleton, ParcelasSkeleton } from "@/components/ui/page-loading";
+import type { DashboardStats } from "@/types/database";
+
+const RESUMO_VAZIO: DashboardStats = {
+  totalCusto: 0,
+  totalVenda: 0,
+  lucroEstimado: 0,
+};
 
 export default function DashboardPage() {
   const resumo = usePageData(PAGE_CACHE_KEYS.dashboardResumo, fetchDashboardResumo);
@@ -32,17 +38,14 @@ export default function DashboardPage() {
         }
       />
 
-      {!resumo ? (
-        <StatsCardsSkeleton />
-      ) : (
-        <StatsCards
-          initialStats={resumo.stats}
-          totalAPagar={resumo.totalAPagar}
-          totalAReceber={resumo.totalAReceber}
-        />
-      )}
+      <StatsCards
+        initialStats={resumo?.stats ?? RESUMO_VAZIO}
+        totalAPagar={resumo?.totalAPagar ?? 0}
+        totalAReceber={resumo?.totalAReceber ?? 0}
+        isLoading={!resumo}
+      />
 
-      {!parcelas ? <ParcelasSkeleton /> : <ParcelasAVencer initialParcelas={parcelas} />}
+      <ParcelasAVencer initialParcelas={parcelas ?? []} />
     </div>
   );
 }

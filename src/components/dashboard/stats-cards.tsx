@@ -20,6 +20,7 @@ interface StatsCardsProps {
   initialStats: DashboardStats;
   totalAPagar: number;
   totalAReceber: number;
+  isLoading?: boolean;
 }
 
 interface StatItem {
@@ -45,13 +46,14 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function StatCard({ item }: { item: StatItem }) {
+function StatCard({ item, isLoading }: { item: StatItem; isLoading?: boolean }) {
   const content = (
     <Card
       className={cn(
         "overflow-hidden rounded-xl border-l-2 bg-gradient-to-br from-white to-brand-cream/20 transition-shadow",
         item.accent,
-        item.href && "hover:shadow-sm hover:shadow-brand-red/10"
+        item.href && "hover:shadow-sm hover:shadow-brand-red/10",
+        isLoading && "opacity-80"
       )}
     >
       <div className="flex items-center gap-2 px-2.5 py-2">
@@ -65,7 +67,8 @@ function StatCard({ item }: { item: StatItem }) {
           <p
             className={cn(
               "text-sm font-bold tabular-nums leading-tight mt-0.5",
-              item.valueColor ?? "text-brand-black"
+              item.valueColor ?? "text-brand-black",
+              isLoading && "animate-pulse"
             )}
           >
             {item.value}
@@ -90,6 +93,7 @@ export function StatsCards({
   initialStats,
   totalAPagar,
   totalAReceber: initialAReceber,
+  isLoading = false,
 }: StatsCardsProps) {
   const [stats, setStats] = useState(initialStats);
   const [totalAReceber, setTotalAReceber] = useState(initialAReceber);
@@ -241,7 +245,7 @@ export function StatsCards({
         <SectionLabel>Estoque</SectionLabel>
         <div className="grid gap-2 grid-cols-2 lg:grid-cols-3">
           {estoqueCards.map((item) => (
-            <StatCard key={item.title} item={item} />
+            <StatCard key={item.title} item={item} isLoading={isLoading} />
           ))}
         </div>
       </div>
@@ -249,11 +253,11 @@ export function StatsCards({
       <div className="grid gap-2 grid-cols-2">
         <div>
           <SectionLabel>A receber</SectionLabel>
-          <StatCard item={receberCard} />
+          <StatCard item={receberCard} isLoading={isLoading} />
         </div>
         <div>
           <SectionLabel>A pagar</SectionLabel>
-          <StatCard item={pagarCard} />
+          <StatCard item={pagarCard} isLoading={isLoading} />
         </div>
       </div>
     </div>
