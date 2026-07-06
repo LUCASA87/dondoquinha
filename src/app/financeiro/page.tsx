@@ -1,32 +1,31 @@
 import {
-  getParcelasPendentes,
+  getParcelasAbertas,
   getContasAPagar,
   getTotalBoletosMesAtual,
-  getCartoes,
-  getFaturasCartao,
   getResumoFaturasCartao,
+  buscarClientesComSaldo,
 } from "@/app/actions/financeiro";
 import { FinanceiroModule } from "@/components/financeiro/financeiro-module";
 
 export default async function FinanceiroPage() {
-  const [parcelas, contas, totalBoletosMes, cartoes, faturas, resumoCartoes] =
+  const [parcelas, contas, totalBoletosMes, resumoCartoes, clientesComSaldo] =
     await Promise.all([
-      getParcelasPendentes(),
+      getParcelasAbertas(),
       getContasAPagar(),
       getTotalBoletosMesAtual(),
-      getCartoes(),
-      getFaturasCartao(),
       getResumoFaturasCartao(),
+      buscarClientesComSaldo(""),
     ]);
+
+  const totalCartaoMes = resumoCartoes.reduce((sum, r) => sum + r.total, 0);
+  const totalAPagarMes = totalBoletosMes + totalCartaoMes;
 
   return (
     <FinanceiroModule
-      parcelas={parcelas as Parameters<typeof FinanceiroModule>[0]["parcelas"]}
+      parcelas={parcelas}
+      clientesComSaldo={clientesComSaldo}
       contas={contas}
-      totalBoletosMes={totalBoletosMes}
-      cartoes={cartoes}
-      faturas={faturas as Parameters<typeof FinanceiroModule>[0]["faturas"]}
-      resumoCartoes={resumoCartoes}
+      totalAPagarMes={totalAPagarMes}
     />
   );
 }

@@ -20,9 +20,20 @@
 }
 
 body {
-  background: var(--brand-bg);
+  background: linear-gradient(
+    165deg,
+    var(--brand-cream) 0%,
+    var(--brand-bg) 40%,
+    #ffffff 100%
+  );
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+::selection {
+  background: rgb(165 28 48 / 0.18);
+  color: var(--brand-black);
 }
 
 .font-serif {

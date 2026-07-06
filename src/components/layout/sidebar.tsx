@@ -11,9 +11,13 @@ import {
   Wallet,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { logoutAction } from "@/app/actions/auth";
+import { TrocarSenhaDialog } from "@/components/auth/trocar-senha-dialog";
 
 const navItems = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard },
@@ -26,13 +30,20 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function handleLogout() {
+    startTransition(async () => {
+      await logoutAction();
+    });
+  }
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed left-4 top-4 z-40 rounded-lg bg-white p-2 shadow-md lg:hidden"
+        className="fixed left-4 top-4 z-40 rounded-lg border border-brand-red/20 bg-white p-2 shadow-md shadow-brand-red/10 lg:hidden"
         aria-label="Abrir menu"
       >
         <Menu className="h-6 w-6 text-brand-red" />
@@ -47,22 +58,24 @@ export function Sidebar() {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-brand-red/10 bg-white transition-transform lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-brand-red/15 bg-white shadow-lg shadow-brand-red/5 transition-transform lg:static lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex items-center justify-between border-b border-brand-red/10 px-6 py-5">
+        <div className="w-1 shrink-0 bg-brand-red absolute inset-y-0 left-0" aria-hidden />
+
+        <div className="relative border-b-2 border-brand-red/20 bg-gradient-to-br from-brand-cream via-brand-cream/80 to-white px-6 py-5">
           <Link href="/dashboard" className="flex items-center gap-3" onClick={() => setOpen(false)}>
             <Image
               src="/logo.png"
               alt="Dondoquinha Moda e Beleza"
-              width={48}
-              height={48}
-              className="rounded-full"
+              width={52}
+              height={52}
+              className="rounded-full ring-2 ring-brand-red/40 ring-offset-2 ring-offset-brand-cream"
             />
             <div>
               <p className="font-serif text-lg leading-tight text-brand-black">Dondoquinha</p>
-              <p className="text-[10px] font-medium tracking-widest text-brand-black/60">
+              <p className="text-[10px] font-semibold tracking-[0.2em] text-brand-red">
                 MODA E BELEZA
               </p>
             </div>
@@ -70,10 +83,10 @@ export function Sidebar() {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="rounded-lg p-1 lg:hidden"
+            className="absolute right-4 top-5 rounded-lg p-1 lg:hidden"
             aria-label="Fechar menu"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5 text-brand-black/60" />
           </button>
         </div>
 
@@ -86,22 +99,38 @@ export function Sidebar() {
                 href={href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl px-4 py-3.5 text-base font-medium transition-colors",
+                  "flex items-center gap-3 rounded-xl px-4 py-3.5 text-base font-medium transition-all",
                   active
-                    ? "bg-brand-red text-white shadow-sm"
-                    : "text-brand-black/70 hover:bg-brand-cream hover:text-brand-black"
+                    ? "bg-brand-red text-white shadow-md shadow-brand-red/25"
+                    : "text-brand-black/70 hover:bg-brand-cream hover:text-brand-red"
                 )}
               >
-                <Icon className="h-5 w-5" />
-                {label}
+                <Icon
+                  className={cn(
+                    "h-5 w-5",
+                    active ? "text-white" : "text-brand-red/70 group-hover:text-brand-red"
+                  )}
+                />
+                <span>{label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="border-t border-brand-red/10 p-4">
-          <p className="text-center text-xs text-brand-black/40">
-            Sistema de Gestão
+        <div className="border-t border-brand-red/15 bg-brand-cream/50 p-4 space-y-3">
+          <TrocarSenhaDialog />
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-center gap-2 border-brand-red/20 text-brand-red hover:bg-brand-red/5"
+            onClick={handleLogout}
+            disabled={pending}
+          >
+            <LogOut className="h-4 w-4" />
+            {pending ? "Saindo..." : "Sair"}
+          </Button>
+          <p className="text-center text-xs font-medium text-brand-red/60">
+            Dondoquinha · Gestão
           </p>
         </div>
       </aside>

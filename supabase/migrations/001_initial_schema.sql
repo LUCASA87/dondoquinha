@@ -85,3 +85,5 @@ CREATE INDEX IF NOT EXISTS idx_faturas_cartao_cartao ON faturas_cartao(cartao_id
 
 -- Habilite Realtime para produtos no painel Supabase:
 -- Database → Replication → produtos → Enable
+
+-- Execute também: supabase/migrations/002_rls_policies.sql

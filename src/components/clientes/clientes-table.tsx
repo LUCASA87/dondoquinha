@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { useState, useTransition, useMemo } from "react";
+import { Plus, Pencil, Trash2, Search, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +26,12 @@ import {
   updateCliente,
   deleteCliente,
 } from "@/app/actions/clientes";
+import { useAppMessages } from "@/components/ui/app-messages";
+import { WhatsAppButton } from "@/components/ui/whatsapp-button";
+import { ClienteDebitoPanel } from "@/components/financeiro/consulta-cliente-debito";
 import { formatCPF, formatPhone } from "@/lib/format";
+import { mensagemWhatsAppCliente } from "@/lib/whatsapp";
+import { cn } from "@/lib/utils";
 import type { Cliente } from "@/types/database";
 
 interface ClientesTableProps {
@@ -111,14 +116,39 @@ function ClienteForm({
 }
 
 export function ClientesTable({ clientes }: ClientesTableProps) {
+  const { confirm, toast } = useAppMessages();
   const [open, setOpen] = useState(false);
   const [editCliente, setEditCliente] = useState<Cliente | null>(null);
+  const [busca, setBusca] = useState("");
+  const [clienteDebito, setClienteDebito] = useState<Cliente | null>(null);
+  const [comprovanteAberto, setComprovanteAberto] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  function handleDelete(id: string) {
-    if (!confirm("Tem certeza que deseja excluir esta cliente?")) return;
+  const clientesFiltrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return clientes;
+    return clientes.filter(
+      (c) =>
+        c.nome.toLowerCase().includes(termo) ||
+        c.cpf.includes(termo.replace(/\D/g, ""))
+    );
+  }, [clientes, busca]);
+
+  async function handleDelete(id: string) {
+    const ok = await confirm({
+      title: "Excluir cliente",
+      message: "Tem certeza que deseja excluir esta cliente?",
+      confirmLabel: "Excluir",
+      variant: "danger",
+    });
+    if (!ok) return;
     startTransition(async () => {
-      await deleteCliente(id);
+      const result = await deleteCliente(id);
+      if (result.error) {
+        toast(result.error, "error");
+      } else {
+        toast("Cliente excluída com sucesso.", "success");
+      }
     });
   }
 
@@ -126,7 +156,7 @@ export function ClientesTable({ clientes }: ClientesTableProps) {
     <div>
       <PageHeader
         title="Clientes"
-        description="Cadastre e gerencie suas clientes."
+        description="Pesquise a cliente e veja o que ela deve no crediário."
         action={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -153,9 +183,21 @@ export function ClientesTable({ clientes }: ClientesTableProps) {
         }
       />
 
-      {clientes.length === 0 ? (
+      <div className="mb-6 relative max-w-md">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-black/40" />
+        <Input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Pesquisar por nome ou CPF..."
+          className="pl-10"
+        />
+      </div>
+
+      {clientesFiltrados.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-brand-red/20 bg-white p-12 text-center">
-          <p className="text-brand-black/60">Nenhuma cliente cadastrada ainda.</p>
+          <p className="text-brand-black/60">
+            {busca ? "Nenhuma cliente encontrada." : "Nenhuma cliente cadastrada ainda."}
+          </p>
         </div>
       ) : (
         <Table>
@@ -169,14 +211,41 @@ export function ClientesTable({ clientes }: ClientesTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {clientes.map((c) => (
-              <TableRow key={c.id}>
+            {clientesFiltrados.map((c) => (
+              <TableRow
+                key={c.id}
+                className="cursor-pointer"
+                onClick={() => setClienteDebito(c)}
+              >
                 <TableCell className="font-medium">{c.nome}</TableCell>
                 <TableCell>{formatCPF(c.cpf)}</TableCell>
-                <TableCell>{c.telefone ? formatPhone(c.telefone) : "—"}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span>{c.telefone ? formatPhone(c.telefone) : "—"}</span>
+                    {c.telefone && (
+                      <WhatsAppButton
+                        telefone={c.telefone}
+                        mensagem={mensagemWhatsAppCliente(c.nome)}
+                        size="icon"
+                        label="WhatsApp"
+                      />
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>{c.endereco || "—"}</TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
+                  <div
+                    className="flex justify-end gap-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setClienteDebito(c)}
+                    >
+                      <Wallet className="h-4 w-4" />
+                      Ver débito
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -202,6 +271,37 @@ export function ClientesTable({ clientes }: ClientesTableProps) {
           </TableBody>
         </Table>
       )}
+
+      <Dialog
+        open={!!clienteDebito}
+        onOpenChange={(open) => {
+          if (!open) {
+            setClienteDebito(null);
+            setComprovanteAberto(false);
+          }
+        }}
+      >
+        <DialogContent
+          className={cn(
+            "max-w-2xl max-h-[90vh] overflow-y-auto",
+            comprovanteAberto && "overflow-hidden border-0 bg-transparent p-0 shadow-none"
+          )}
+        >
+          {!comprovanteAberto && (
+            <DialogHeader>
+              <DialogTitle>
+                {clienteDebito ? `Débitos — ${clienteDebito.nome}` : "Débitos"}
+              </DialogTitle>
+            </DialogHeader>
+          )}
+          {clienteDebito && (
+            <ClienteDebitoPanel
+              clienteId={clienteDebito.id}
+              onComprovanteVisivel={setComprovanteAberto}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

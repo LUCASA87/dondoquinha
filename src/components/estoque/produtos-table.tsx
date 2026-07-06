@@ -22,7 +22,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createProduto, updateProduto, deleteProduto } from "@/app/actions/produtos";
-import { formatCurrency } from "@/lib/format";
+import { InputMoeda } from "@/components/ui/input-moeda";
+import { useAppMessages } from "@/components/ui/app-messages";
+import { Badge } from "@/components/ui/badge";
+import { formatCurrency, formatItemNome } from "@/lib/format";
 import type { Produto } from "@/types/database";
 
 interface ProdutosTableProps {
@@ -37,12 +40,22 @@ function ProdutoForm({
   onDone: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [precoCusto, setPrecoCusto] = useState(Number(produto?.preco_custo ?? 0));
+  const [precoVenda, setPrecoVenda] = useState(Number(produto?.preco_venda ?? 0));
   const [pending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+
+    if (precoCusto <= 0 || precoVenda <= 0) {
+      setError("Informe preço de custo e venda maiores que zero.");
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
+    formData.set("preco_custo", String(precoCusto));
+    formData.set("preco_venda", String(precoVenda));
 
     startTransition(async () => {
       const result = produto
@@ -65,8 +78,9 @@ function ProdutoForm({
           id="nome"
           name="nome"
           required
-          defaultValue={produto?.nome}
-          placeholder="Ex: Batom vermelho"
+          defaultValue={produto?.nome ? formatItemNome(produto.nome) : ""}
+          placeholder="Ex: BATOM VERMELHO"
+          className="uppercase"
         />
       </div>
       <div className="space-y-2">
@@ -92,26 +106,20 @@ function ProdutoForm({
         </div>
         <div className="space-y-2">
           <Label htmlFor="preco_custo">Preço Custo</Label>
-          <Input
+          <InputMoeda
             id="preco_custo"
-            name="preco_custo"
-            type="number"
-            min="0"
-            step="0.01"
+            value={precoCusto}
+            onChange={setPrecoCusto}
             required
-            defaultValue={produto?.preco_custo ?? ""}
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="preco_venda">Preço Venda</Label>
-          <Input
+          <InputMoeda
             id="preco_venda"
-            name="preco_venda"
-            type="number"
-            min="0"
-            step="0.01"
+            value={precoVenda}
+            onChange={setPrecoVenda}
             required
-            defaultValue={produto?.preco_venda ?? ""}
           />
         </div>
       </div>
@@ -124,14 +132,26 @@ function ProdutoForm({
 }
 
 export function ProdutosTable({ produtos }: ProdutosTableProps) {
+  const { confirm, toast } = useAppMessages();
   const [open, setOpen] = useState(false);
   const [editProduto, setEditProduto] = useState<Produto | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function handleDelete(id: string) {
-    if (!confirm("Tem certeza que deseja excluir este produto?")) return;
+  async function handleDelete(id: string) {
+    const ok = await confirm({
+      title: "Excluir produto",
+      message: "Tem certeza que deseja excluir este produto?",
+      confirmLabel: "Excluir",
+      variant: "danger",
+    });
+    if (!ok) return;
     startTransition(async () => {
-      await deleteProduto(id);
+      const result = await deleteProduto(id);
+      if (result.error) {
+        toast(result.error, "error");
+      } else {
+        toast("Produto excluído com sucesso.", "success");
+      }
     });
   }
 
@@ -155,6 +175,7 @@ export function ProdutosTable({ produtos }: ProdutosTableProps) {
                 </DialogTitle>
               </DialogHeader>
               <ProdutoForm
+                key={editProduto?.id ?? "novo"}
                 produto={editProduto ?? undefined}
                 onDone={() => {
                   setOpen(false);
@@ -187,10 +208,22 @@ export function ProdutosTable({ produtos }: ProdutosTableProps) {
           </TableHeader>
           <TableBody>
             {produtos.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.nome}</TableCell>
+              <TableRow
+                key={p.id}
+                className={p.quantidade < 1 ? "bg-brand-red/5" : undefined}
+              >
+                <TableCell className="font-medium uppercase">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {formatItemNome(p.nome)}
+                    {p.quantidade < 1 && (
+                      <Badge variant="warning">Esgotado</Badge>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>{p.codigo_sku || "—"}</TableCell>
-                <TableCell>{p.quantidade}</TableCell>
+                <TableCell className={p.quantidade < 1 ? "text-brand-red font-medium" : undefined}>
+                  {p.quantidade}
+                </TableCell>
                 <TableCell>{formatCurrency(Number(p.preco_custo))}</TableCell>
                 <TableCell>{formatCurrency(Number(p.preco_venda))}</TableCell>
                 <TableCell className="text-right">

@@ -1,74 +1,478 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { LinhaRelatorioConta } from "@/lib/relatorio-contas-pagar-pdf";
 import { createClient } from "@/lib/supabase/server";
+import type { ComprovantePagamentoData } from "@/lib/store";
+import type { ClienteDebitoResumo, StatusPagamento, ParcelaAVencer } from "@/types/database";
+import { filtrarParcelasPagaveis } from "@/lib/parcelas-utils";
+import {
+  agruparNomesItensPorVenda,
+  buscarItensVendas,
+  mapItensComprovante,
+} from "@/lib/venda-itens";
+import { formatCPF } from "@/lib/format";
 
-export async function darBaixaParcela(id: string) {
-  const supabase = await createClient();
+async function getTotalPagoVenda(supabase: Awaited<ReturnType<typeof createClient>>, vendaId: string) {
+  const { data } = await supabase
+    .from("pagamentos_crediario")
+    .select("valor_pago")
+    .eq("venda_id", vendaId);
 
-  const { error } = await supabase
-    .from("parcelas_vendas")
-    .update({ status: "pago" })
-    .eq("id", id);
-
-  if (error) return { error: error.message };
-
-  const { data: parcela } = await supabase
-    .from("parcelas_vendas")
-    .select("venda_id")
-    .eq("id", id)
-    .single();
-
-  if (parcela) {
-    const { data: pendentes } = await supabase
-      .from("parcelas_vendas")
-      .select("id")
-      .eq("venda_id", parcela.venda_id)
-      .eq("status", "pendente");
-
-    if (!pendentes || pendentes.length === 0) {
-      await supabase
-        .from("vendas")
-        .update({ status: "pago" })
-        .eq("id", parcela.venda_id);
-    }
-  }
-
-  revalidatePath("/financeiro");
-  return { success: true };
+  return (data ?? []).reduce((sum, p) => sum + Number(p.valor_pago), 0);
 }
 
-export async function getParcelasPendentes(filtroPagamento?: string) {
+export async function registrarPagamentoCrediario(data: {
+  parcela_id: string;
+  valor_pago: number;
+  obs?: string;
+}) {
   const supabase = await createClient();
+  const valorPago = Math.round(data.valor_pago * 100) / 100;
 
-  let query = supabase
+  if (valorPago < 0.01) {
+    return { error: "Informe um valor de pelo menos R$0,01." };
+  }
+
+  const { data: parcela, error: parcelaError } = await supabase
     .from("parcelas_vendas")
     .select("*, vendas(*, clientes(nome))")
-    .eq("status", "pendente")
-    .order("data_vencimento");
+    .eq("id", data.parcela_id)
+    .single();
 
-  const { data, error } = await query;
+  if (parcelaError || !parcela || !parcela.vendas) {
+    return { error: "Parcela não encontrada." };
+  }
+
+  const venda = parcela.vendas;
+  const valorTotalVenda = Number(venda.valor_total);
+
+  const { data: todasParcelas, error: parcelasError } = await supabase
+    .from("parcelas_vendas")
+    .select("*")
+    .eq("venda_id", venda.id)
+    .order("numero_parcela");
+
+  if (parcelasError || !todasParcelas?.length) {
+    return { error: "Parcelas da venda não encontradas." };
+  }
+
+  const parcelasComSaldo = todasParcelas
+    .map((p) => ({
+      ...p,
+      saldo: Number(p.valor_parcela) - Number(p.valor_pago ?? 0),
+    }))
+    .filter((p) => p.saldo > 0.001);
+
+  const proximaParcela = parcelasComSaldo[0];
+  if (!proximaParcela || proximaParcela.id !== data.parcela_id) {
+    const num = proximaParcela?.numero_parcela ?? 1;
+    return { error: `Pague a ${num}ª parcela antes. Não é permitido pular parcelas.` };
+  }
+
+  const totalJaPagoAntes = todasParcelas.reduce(
+    (sum, p) => sum + Number(p.valor_pago ?? 0),
+    0
+  );
+  const saldoRestanteAntes = valorTotalVenda - totalJaPagoAntes;
+
+  if (saldoRestanteAntes <= 0.001) {
+    return { error: "Esta venda já está quitada." };
+  }
+
+  if (valorPago > saldoRestanteAntes + 0.001) {
+    return {
+      error: `Valor máximo: R$ ${saldoRestanteAntes.toFixed(2).replace(".", ",")}`,
+    };
+  }
+
+  const dataPagamento = new Date().toISOString().split("T")[0];
+  const parcelaInicialNumero = parcela.numero_parcela;
+  let restante = valorPago;
+  let saldoParcelaRestante = 0;
+
+  for (const p of todasParcelas) {
+    if (restante <= 0.001) break;
+
+    const saldo = Number(p.valor_parcela) - Number(p.valor_pago ?? 0);
+    if (saldo <= 0.001) continue;
+
+    const aplicar = Math.round(Math.min(restante, saldo) * 100) / 100;
+    const novoValorPago = Number(p.valor_pago ?? 0) + aplicar;
+    const quitada = novoValorPago >= Number(p.valor_parcela) - 0.001;
+
+    const { error: pagamentoError } = await supabase.from("pagamentos_crediario").insert({
+      venda_id: venda.id,
+      parcela_id: p.id,
+      valor_pago: aplicar,
+      obs: data.obs?.trim() || null,
+      data_pagamento: dataPagamento,
+    });
+
+    if (pagamentoError) return { error: pagamentoError.message };
+
+    const { error: updateError } = await supabase
+      .from("parcelas_vendas")
+      .update({
+        valor_pago: novoValorPago,
+        status: quitada ? "pago" : "pendente",
+      })
+      .eq("id", p.id);
+
+    if (updateError) return { error: updateError.message };
+
+    if (p.numero_parcela === parcelaInicialNumero) {
+      saldoParcelaRestante = Math.max(0, Number(p.valor_parcela) - novoValorPago);
+    }
+
+    restante = Math.round((restante - aplicar) * 100) / 100;
+  }
+
+  const totalJaPago = totalJaPagoAntes + valorPago;
+  const saldoRestante = Math.max(0, valorTotalVenda - totalJaPago);
+
+  if (saldoRestante <= 0.001) {
+    await supabase.from("vendas").update({ status: "pago" }).eq("id", venda.id);
+  }
+
+  const numeroPedido = venda.id.replace(/-/g, "").slice(0, 8).toUpperCase();
+
+  const itensRows = await buscarItensVendas(supabase, [venda.id]);
+  const itens = mapItensComprovante(itensRows);
+
+  revalidatePath("/financeiro");
+  revalidatePath("/vendas");
+  revalidatePath("/clientes");
+  revalidatePath("/dashboard");
+
+  const comprovante: ComprovantePagamentoData = {
+    numeroPedido,
+    dataPagamento,
+    clienteNome: venda.clientes?.nome ?? "—",
+    parcelaNumero: parcelaInicialNumero,
+    parcelasTotal: venda.parcelas,
+    valorPagoAgora: valorPago,
+    obs: data.obs?.trim() || null,
+    valorTotalVenda,
+    totalJaPago,
+    saldoRestante,
+    saldoParcela: saldoParcelaRestante,
+    itens,
+  };
+
+  return { success: true, comprovante };
+}
+
+export async function getParcelasAbertas() {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("parcelas_vendas")
+    .select("*, vendas(*, clientes(nome))")
+    .order("data_vencimento");
 
   if (error) return [];
 
-  if (filtroPagamento && filtroPagamento !== "todos") {
-    return data.filter(
-      (p) => p.vendas && p.vendas.forma_pagamento === filtroPagamento
-    );
+  return data
+    .map((p) => ({
+      ...p,
+      valor_pago: Number(p.valor_pago ?? 0),
+      saldo_parcela: Number(p.valor_parcela) - Number(p.valor_pago ?? 0),
+    }))
+    .filter((p) => p.saldo_parcela > 0.001);
+}
+
+export async function excluirParcelaCrediario(parcelaId: string) {
+  const supabase = await createClient();
+
+  const { data: parcela, error: parcelaError } = await supabase
+    .from("parcelas_vendas")
+    .select("*, vendas(id, valor_total, parcelas)")
+    .eq("id", parcelaId)
+    .single();
+
+  if (parcelaError || !parcela) {
+    return { error: "Parcela não encontrada." };
   }
 
-  return data;
+  const vendaId = parcela.venda_id;
+  const venda = parcela.vendas as { id: string; valor_total: number; parcelas: number } | null;
+  const valorParcela = Number(parcela.valor_parcela);
+
+  const { error: deleteError } = await supabase
+    .from("parcelas_vendas")
+    .delete()
+    .eq("id", parcelaId);
+
+  if (deleteError) return { error: deleteError.message };
+
+  const { data: restantes } = await supabase
+    .from("parcelas_vendas")
+    .select("valor_parcela, valor_pago, status")
+    .eq("venda_id", vendaId)
+    .order("numero_parcela");
+
+  if (!restantes?.length) {
+    await supabase.from("vendas").delete().eq("id", vendaId);
+  } else if (venda) {
+    const novoTotal = Math.max(0, Math.round((Number(venda.valor_total) - valorParcela) * 100) / 100);
+    const totalPago = restantes.reduce((sum, p) => sum + Number(p.valor_pago ?? 0), 0);
+    const quitada = totalPago >= novoTotal - 0.001;
+
+    await supabase
+      .from("vendas")
+      .update({
+        valor_total: novoTotal,
+        parcelas: restantes.length,
+        status: quitada ? "pago" : "pendente",
+      })
+      .eq("id", vendaId);
+  }
+
+  revalidatePath("/financeiro");
+  revalidatePath("/vendas");
+  revalidatePath("/clientes");
+  revalidatePath("/dashboard");
+
+  return { success: true };
+}
+
+export async function getParcelasAVencer(diasAhead = 30): Promise<ParcelaAVencer[]> {
+  const supabase = await createClient();
+  const hoje = new Date();
+  hoje.setHours(12, 0, 0, 0);
+  const limite = new Date(hoje);
+  limite.setDate(limite.getDate() + diasAhead);
+  const hojeStr = hoje.toISOString().split("T")[0];
+  const limiteStr = limite.toISOString().split("T")[0];
+
+  const { data, error } = await supabase
+    .from("parcelas_vendas")
+    .select("*, vendas(id, parcelas, clientes(id, nome, telefone))")
+    .lte("data_vencimento", limiteStr)
+    .order("data_vencimento");
+
+  if (error || !data) return [];
+
+  const comSaldo = data
+    .map((p) => ({
+      ...p,
+      valor_pago: Number(p.valor_pago ?? 0),
+      saldo_parcela: Number(p.valor_parcela) - Number(p.valor_pago ?? 0),
+    }))
+    .filter((p) => p.saldo_parcela > 0.001);
+
+  const proximas = filtrarParcelasPagaveis(comSaldo);
+  const vendaIds = [...new Set(proximas.map((p) => p.venda_id ?? (p.vendas as { id: string } | null)?.id).filter(Boolean))] as string[];
+  const itensRows = await buscarItensVendas(supabase, vendaIds);
+  const produtosPorVenda = agruparNomesItensPorVenda(itensRows);
+
+  return proximas
+    .map((p) => {
+      const venda = p.vendas as {
+        id: string;
+        parcelas: number;
+        clientes: { id: string; nome: string; telefone: string | null } | null;
+      } | null;
+      const cliente = venda?.clientes;
+      const venc = p.data_vencimento;
+
+      let status_vencimento: ParcelaAVencer["status_vencimento"];
+      if (venc < hojeStr) status_vencimento = "vencida";
+      else if (venc === hojeStr) status_vencimento = "hoje";
+      else status_vencimento = "a_vencer";
+
+      const vendaId = venda?.id ?? p.venda_id;
+
+      return {
+        id: p.id,
+        venda_id: vendaId,
+        numero_parcela: p.numero_parcela,
+        parcelas_total: venda?.parcelas ?? 1,
+        saldo_parcela: p.saldo_parcela,
+        data_vencimento: venc,
+        numero_pedido: vendaId.replace(/-/g, "").slice(0, 8).toUpperCase(),
+        cliente_id: cliente?.id ?? "",
+        cliente_nome: cliente?.nome ?? "—",
+        cliente_telefone: cliente?.telefone ?? null,
+        produtos: produtosPorVenda.get(vendaId) ?? [],
+        status_vencimento,
+      };
+    })
+    .sort((a, b) => a.data_vencimento.localeCompare(b.data_vencimento));
+}
+
+export async function getDebitoCliente(clienteId: string): Promise<ClienteDebitoResumo | null> {
+  const supabase = await createClient();
+
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("*")
+    .eq("id", clienteId)
+    .single();
+
+  if (!cliente) return null;
+
+  const { data: vendas } = await supabase
+    .from("vendas")
+    .select("*, parcelas_vendas(*)")
+    .eq("cliente_id", clienteId)
+    .order("data_venda", { ascending: false });
+
+  let totalDevido = 0;
+  let totalPago = 0;
+  let totalCompras = 0;
+  const vendasResumo = [];
+  const vendaIds = (vendas ?? []).map((v) => v.id);
+  const itensRows = await buscarItensVendas(supabase, vendaIds);
+  const produtosPorVenda = agruparNomesItensPorVenda(itensRows);
+
+  for (const venda of vendas ?? []) {
+    const pago = await getTotalPagoVenda(supabase, venda.id);
+    const valorTotal = Number(venda.valor_total);
+    const saldo = Math.max(0, valorTotal - pago);
+
+    totalCompras += valorTotal;
+    totalPago += pago;
+    totalDevido += saldo;
+
+    const parcelasRaw = (venda.parcelas_vendas ?? []) as Array<{
+      id: string;
+      venda_id: string;
+      numero_parcela: number;
+      valor_parcela: number;
+      valor_pago?: number;
+      data_vencimento: string;
+      status: string;
+    }>;
+
+    const parcelas = parcelasRaw
+      .sort((a, b) => a.numero_parcela - b.numero_parcela)
+      .map((p) => {
+        const valorPago = Number(p.valor_pago ?? 0);
+        const saldoParcela = Number(p.valor_parcela) - valorPago;
+        return {
+          ...p,
+          status: p.status as StatusPagamento,
+          valor_pago: valorPago,
+          saldo_parcela: saldoParcela,
+          vendas: {
+            ...venda,
+            clientes: { nome: cliente.nome },
+          },
+        };
+      })
+      .filter((p) => p.saldo_parcela > 0.001);
+
+    if (saldo > 0.001) {
+      vendasResumo.push({
+        id: venda.id,
+        numeroPedido: venda.id.replace(/-/g, "").slice(0, 8).toUpperCase(),
+        data_venda: venda.data_venda,
+        valor_total: valorTotal,
+        totalPago: pago,
+        saldoRestante: saldo,
+        parcelasTotal: venda.parcelas,
+        obs: venda.obs ?? null,
+        produtos: produtosPorVenda.get(venda.id) ?? [],
+        parcelas,
+      });
+    }
+  }
+
+  return {
+    cliente,
+    totalDevido,
+    totalPago,
+    totalCompras,
+    vendas: vendasResumo,
+  };
+}
+
+export async function buscarClientesComSaldo(termo: string) {
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("clientes")
+    .select("id, nome, cpf")
+    .order("nome")
+    .limit(30);
+
+  if (termo.trim()) {
+    query = query.ilike("nome", `%${termo.trim()}%`);
+  }
+
+  const { data: clientes, error } = await query;
+  if (error || !clientes) return [];
+
+  const resultado = [];
+  for (const c of clientes) {
+    const debito = await getDebitoCliente(c.id);
+    resultado.push({
+      id: c.id,
+      nome: c.nome,
+      cpf: c.cpf,
+      totalDevido: debito?.totalDevido ?? 0,
+    });
+  }
+
+  return resultado;
+}
+
+export async function getTotalAReceber() {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("parcelas_vendas")
+    .select("valor_parcela, valor_pago");
+
+  if (error || !data) return 0;
+
+  return data.reduce((sum, p) => {
+    const saldo = Number(p.valor_parcela) - Number(p.valor_pago ?? 0);
+    return sum + (saldo > 0.001 ? saldo : 0);
+  }, 0);
 }
 
 export async function createContaAPagar(formData: FormData) {
   const supabase = await createClient();
 
-  const { error } = await supabase.from("contas_a_pagar").insert({
-    descricao: formData.get("descricao") as string,
-    valor: Number(formData.get("valor")),
-    data_vencimento: formData.get("data_vencimento") as string,
-    status: "pendente",
-  });
+  const descricao = (formData.get("descricao") as string)?.trim();
+  const valorTotal = Number(formData.get("valor"));
+  const parcelas = Math.max(1, Math.min(12, Number(formData.get("parcelas") ?? 1)));
+  const dataBase = formData.get("data_vencimento") as string;
+
+  if (!descricao) {
+    return { error: "Informe o fornecedor ou descrição." };
+  }
+
+  if (!valorTotal || valorTotal <= 0) {
+    return { error: "Informe um valor maior que zero." };
+  }
+
+  if (!dataBase) {
+    return { error: "Informe a data de vencimento." };
+  }
+
+  const valorParcela = Math.round((valorTotal / parcelas) * 100) / 100;
+  const vencimentoInicial = new Date(dataBase + "T12:00:00");
+  const registros = [];
+
+  for (let i = 1; i <= parcelas; i++) {
+    const vencimento = new Date(vencimentoInicial);
+    vencimento.setDate(vencimento.getDate() + 30 * (i - 1));
+
+    registros.push({
+      descricao: parcelas > 1 ? `${descricao} (${i}/${parcelas})` : descricao,
+      valor: valorParcela,
+      data_vencimento: vencimento.toISOString().split("T")[0],
+      status: "pendente" as const,
+      parcelas_totais: parcelas,
+      parcela_atual: i,
+    });
+  }
+
+  const { error } = await supabase.from("contas_a_pagar").insert(registros);
 
   if (error) return { error: error.message };
 
@@ -78,10 +482,11 @@ export async function createContaAPagar(formData: FormData) {
 
 export async function darBaixaConta(id: string) {
   const supabase = await createClient();
+  const hoje = new Date().toISOString().split("T")[0];
 
   const { error } = await supabase
     .from("contas_a_pagar")
-    .update({ status: "pago" })
+    .update({ status: "pago", data_pagamento: hoje })
     .eq("id", id);
 
   if (error) return { error: error.message };
@@ -95,10 +500,227 @@ export async function getContasAPagar() {
   const { data, error } = await supabase
     .from("contas_a_pagar")
     .select("*")
+    .eq("status", "pendente")
     .order("data_vencimento");
 
   if (error) return [];
   return data;
+}
+
+export type PeriodoRelatorioContas = "mes" | "3meses" | "90dias";
+
+function dataReferenciaPagamentoConta(conta: {
+  data_pagamento: string | null;
+  data_vencimento: string;
+}) {
+  return conta.data_pagamento ?? conta.data_vencimento;
+}
+
+function tituloRelatorioContas(periodo: PeriodoRelatorioContas): string {
+  const hoje = new Date();
+  const mes = [
+    "JAN", "FEV", "MAR", "ABR", "MAI", "JUN",
+    "JUL", "AGO", "SET", "OUT", "NOV", "DEZ",
+  ][hoje.getMonth()];
+  const ano = hoje.getFullYear();
+
+  if (periodo === "mes") return `Pagas em ${mes}/${ano}`;
+  if (periodo === "3meses") return "Pagas nos últimos 3 meses";
+  return "Pagas nos últimos 90 dias";
+}
+
+export type ResultadoRelatorioContas =
+  | { error: string }
+  | { titulo: string; contas: LinhaRelatorioConta[]; total: number };
+
+export async function getContasPagasRelatorio(
+  periodo: PeriodoRelatorioContas
+): Promise<ResultadoRelatorioContas> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("contas_a_pagar")
+    .select("*")
+    .eq("status", "pago")
+    .order("data_pagamento", { ascending: false });
+
+  if (error) return { error: error.message };
+
+  const hoje = new Date();
+  hoje.setHours(12, 0, 0, 0);
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const inicio3Meses = new Date(hoje);
+  inicio3Meses.setMonth(inicio3Meses.getMonth() - 3);
+  const inicio90Dias = new Date(hoje);
+  inicio90Dias.setDate(inicio90Dias.getDate() - 90);
+
+  const contas = (data ?? [])
+    .filter((c) => {
+      const ref = dataReferenciaPagamentoConta(c);
+      const dataPag = new Date(`${ref}T12:00:00`);
+      if (periodo === "mes") return dataPag >= inicioMes;
+      if (periodo === "3meses") return dataPag >= inicio3Meses;
+      return dataPag >= inicio90Dias;
+    })
+    .sort((a, b) =>
+      dataReferenciaPagamentoConta(b).localeCompare(dataReferenciaPagamentoConta(a))
+    );
+
+  const linhas = contas.map((c) => ({
+    descricao: c.descricao,
+    parcela:
+      (c.parcelas_totais ?? 1) > 1
+        ? `${c.parcela_atual ?? 1}/${c.parcelas_totais}`
+        : "—",
+    dataPagamento: dataReferenciaPagamentoConta(c),
+    valor: Number(c.valor),
+  }));
+
+  const total = linhas.reduce((sum, c) => sum + c.valor, 0);
+
+  return {
+    titulo: tituloRelatorioContas(periodo),
+    contas: linhas,
+    total,
+  };
+}
+
+export type ResultadoRecebimentosCrediario =
+  | { error: string }
+  | {
+      dataInicio: string;
+      dataFim: string;
+      linhas: import("@/lib/relatorio-crediario-recebido-pdf").LinhaRecebimentoCrediario[];
+      total: number;
+    };
+
+export async function getRecebimentosCrediario(
+  dataInicio: string,
+  dataFim: string
+): Promise<ResultadoRecebimentosCrediario> {
+  if (!dataInicio || !dataFim) {
+    return { error: "Informe a data inicial e a data final." };
+  }
+  if (dataInicio > dataFim) {
+    return { error: "A data inicial não pode ser depois da data final." };
+  }
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("pagamentos_crediario")
+    .select("valor_pago, data_pagamento, obs, venda_id, vendas(clientes(nome))")
+    .gte("data_pagamento", dataInicio)
+    .lte("data_pagamento", dataFim)
+    .order("data_pagamento", { ascending: false });
+
+  if (error) return { error: error.message };
+
+  const linhas = (data ?? []).map((p) => {
+    const venda = p.vendas as unknown as { clientes: { nome: string } | null } | null;
+    const pedido = String(p.venda_id).replace(/-/g, "").slice(0, 8).toUpperCase();
+    return {
+      data: p.data_pagamento as string,
+      cliente: venda?.clientes?.nome ?? "—",
+      pedido,
+      valor: Number(p.valor_pago),
+      obs: (p.obs as string | null) ?? "",
+    };
+  });
+
+  const total = linhas.reduce((sum, l) => sum + l.valor, 0);
+
+  return { dataInicio, dataFim, linhas, total };
+}
+
+export type FiltroParcelasClientePDF = "pagas" | "abertas";
+
+export type ResultadoRelatorioClienteCompras =
+  | { error: string }
+  | import("@/lib/relatorio-cliente-compras-pdf").DadosRelatorioClienteComprasPDF;
+
+export async function getRelatorioClienteCompras(
+  clienteId: string,
+  filtro: FiltroParcelasClientePDF
+): Promise<ResultadoRelatorioClienteCompras> {
+  const supabase = await createClient();
+
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("*")
+    .eq("id", clienteId)
+    .single();
+
+  if (!cliente) return { error: "Cliente não encontrada." };
+
+  const { data: vendas } = await supabase
+    .from("vendas")
+    .select("*, parcelas_vendas(*)")
+    .eq("cliente_id", clienteId)
+    .order("data_venda", { ascending: false });
+
+  const vendaIds = (vendas ?? []).map((v) => v.id);
+  const itensRows = await buscarItensVendas(supabase, vendaIds);
+  const produtosPorVenda = agruparNomesItensPorVenda(itensRows);
+
+  let totalCompras = 0;
+  let totalPago = 0;
+  let totalAberto = 0;
+  const vendasPdf = [];
+
+  for (const venda of vendas ?? []) {
+    const pagoVenda = await getTotalPagoVenda(supabase, venda.id);
+    const valorTotal = Number(venda.valor_total);
+    totalCompras += valorTotal;
+    totalPago += pagoVenda;
+    totalAberto += Math.max(0, valorTotal - pagoVenda);
+
+    const parcelasRaw = (venda.parcelas_vendas ?? []) as Array<{
+      numero_parcela: number;
+      valor_parcela: number;
+      valor_pago?: number;
+      data_vencimento: string;
+      status: string;
+    }>;
+
+    const parcelas = parcelasRaw
+      .sort((a, b) => a.numero_parcela - b.numero_parcela)
+      .map((p) => {
+        const valorPago = Number(p.valor_pago ?? 0);
+        const saldo = Number(p.valor_parcela) - valorPago;
+        const quitada = saldo <= 0.001;
+        return {
+          numero: p.numero_parcela,
+          totalParcelas: venda.parcelas,
+          vencimento: p.data_vencimento,
+          valor: Number(p.valor_parcela),
+          pago: valorPago,
+          saldo: Math.max(0, saldo),
+          status: quitada ? "PAGA" : "EM ABERTO",
+        };
+      })
+      .filter((p) => (filtro === "pagas" ? p.saldo <= 0.001 : p.saldo > 0.001));
+
+    if (parcelas.length === 0) continue;
+
+    vendasPdf.push({
+      numeroPedido: venda.id.replace(/-/g, "").slice(0, 8).toUpperCase(),
+      dataCompra: venda.data_venda,
+      produtos: produtosPorVenda.get(venda.id) ?? [],
+      valorTotal,
+      parcelas,
+    });
+  }
+
+  return {
+    clienteNome: cliente.nome,
+    clienteCpf: formatCPF(cliente.cpf),
+    filtroLabel: filtro === "pagas" ? "Parcelas pagas" : "Parcelas em aberto",
+    vendas: vendasPdf,
+    totalCompras,
+    totalPago,
+    totalAberto,
+  };
 }
 
 export async function getTotalBoletosMesAtual() {
@@ -125,11 +747,40 @@ export async function getTotalBoletosMesAtual() {
 export async function createCartao(formData: FormData) {
   const supabase = await createClient();
 
-  const { error } = await supabase.from("cartoes_credito").insert({
-    nome_cartao: formData.get("nome_cartao") as string,
-    dia_vencimento: Number(formData.get("dia_vencimento")),
-    limite: formData.get("limite") ? Number(formData.get("limite")) : null,
-  });
+  const nome = (formData.get("nome_cartao") as string)?.trim();
+  const dia = Number(formData.get("dia_vencimento"));
+  const limiteRaw = (formData.get("limite") as string)?.trim();
+
+  if (!nome) {
+    return { error: "Informe o nome do cartão." };
+  }
+
+  if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
+    return { error: "Informe o dia de vencimento (de 1 a 31)." };
+  }
+
+  const limite = limiteRaw ? Number(limiteRaw) : null;
+
+  const { data, error } = await supabase
+    .from("cartoes_credito")
+    .insert({
+      nome_cartao: nome,
+      dia_vencimento: dia,
+      limite: limite && limite > 0 ? limite : null,
+    })
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/financeiro");
+  return { success: true, cartao: data };
+}
+
+export async function deleteCartao(id: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("cartoes_credito").delete().eq("id", id);
 
   if (error) return { error: error.message };
 

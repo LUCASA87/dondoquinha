@@ -2,12 +2,30 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { formatItemNome } from "@/lib/format";
 
 export async function createProduto(formData: FormData) {
   const supabase = await createClient();
+  const nome = formatItemNome(formData.get("nome") as string);
+
+  const { data: existente } = await supabase
+    .from("produtos")
+    .select("id, quantidade")
+    .eq("nome", nome)
+    .maybeSingle();
+
+  if (existente) {
+    const situacao =
+      existente.quantidade < 1
+        ? " O estoque está zerado — edite o produto e informe a nova quantidade."
+        : " Edite o produto no Estoque para alterar a quantidade.";
+    return {
+      error: `O produto "${nome}" já está cadastrado.${situacao}`,
+    };
+  }
 
   const { error } = await supabase.from("produtos").insert({
-    nome: formData.get("nome") as string,
+    nome,
     codigo_sku: (formData.get("codigo_sku") as string) || null,
     quantidade: Number(formData.get("quantidade")),
     preco_custo: Number(formData.get("preco_custo")),
@@ -27,7 +45,7 @@ export async function updateProduto(id: string, formData: FormData) {
   const { error } = await supabase
     .from("produtos")
     .update({
-      nome: formData.get("nome") as string,
+      nome: formatItemNome(formData.get("nome") as string),
       codigo_sku: (formData.get("codigo_sku") as string) || null,
       quantidade: Number(formData.get("quantidade")),
       preco_custo: Number(formData.get("preco_custo")),

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { CheckCircle, Plus } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { FileDown, Loader2, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -15,13 +16,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -31,86 +25,99 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ListaPaginacao } from "@/components/ui/lista-paginacao";
+import { useAppMessages } from "@/components/ui/app-messages";
 import {
-  darBaixaParcela,
-  getParcelasPendentes,
   createContaAPagar,
   darBaixaConta,
-  createCartao,
-  createFaturaCartao,
-  darBaixaFatura,
+  getContasPagasRelatorio,
+  type PeriodoRelatorioContas,
 } from "@/app/actions/financeiro";
-import {
-  formatCurrency,
-  formatDate,
-  PAGAMENTO_LABELS,
-  FORMAS_PAGAMENTO,
-} from "@/lib/format";
-import type {
-  ParcelaVenda,
-  ContaAPagar,
-  CartaoCredito,
-  FaturaCartao,
-} from "@/types/database";
+import { CrediarioReceber } from "@/components/financeiro/crediario-receber";
+import { RelatorioCrediarioRecebido } from "@/components/financeiro/relatorio-crediario-recebido";
+import { ConsultaClienteDebito } from "@/components/financeiro/consulta-cliente-debito";
+import { SelecaoBotoes, OPCOES_PARCELAS } from "@/components/ui/selecao-botoes";
+import { InputMoeda } from "@/components/ui/input-moeda";
+import { baixarRelatorioContasPDF } from "@/lib/relatorio-contas-pagar-pdf";
+import { formatCurrency, formatDate, formatMesAno } from "@/lib/format";
+import type { ParcelaVenda, ContaAPagar, ClienteComSaldo } from "@/types/database";
+
+const LIMITE_CONTAS_PAGINA = 5;
+
+const RELATORIOS_PAGAR: { id: PeriodoRelatorioContas; label: string }[] = [
+  { id: "mes", label: "Pago do mês" },
+  { id: "3meses", label: "Últimos 3 meses" },
+  { id: "90dias", label: "90 dias" },
+];
 
 interface FinanceiroModuleProps {
-  parcelas: ParcelaVenda[];
+  parcelas: (ParcelaVenda & { saldo_parcela: number })[];
+  clientesComSaldo: ClienteComSaldo[];
   contas: ContaAPagar[];
-  totalBoletosMes: number;
-  cartoes: CartaoCredito[];
-  faturas: FaturaCartao[];
-  resumoCartoes: {
-    cartao: CartaoCredito;
-    total: number;
-    diaVencimento: number;
-  }[];
+  totalAPagarMes: number;
 }
 
 export function FinanceiroModule({
-  parcelas: initialParcelas,
+  parcelas,
+  clientesComSaldo,
   contas: initialContas,
-  totalBoletosMes,
-  cartoes: initialCartoes,
-  faturas: initialFaturas,
-  resumoCartoes,
+  totalAPagarMes,
 }: FinanceiroModuleProps) {
-  const [filtroPagamento, setFiltroPagamento] = useState("todos");
-  const [parcelas, setParcelas] = useState(initialParcelas);
+  const router = useRouter();
+  const { toast } = useAppMessages();
   const [contas, setContas] = useState(initialContas);
-  const [faturas, setFaturas] = useState(initialFaturas);
+  const [dialogContaAberto, setDialogContaAberto] = useState(false);
+  const [paginaContas, setPaginaContas] = useState(1);
+  const [gerandoRelatorio, setGerandoRelatorio] = useState<PeriodoRelatorioContas | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function handleFiltroChange(value: string) {
-    setFiltroPagamento(value);
-    startTransition(async () => {
-      const data = await getParcelasPendentes(value === "todos" ? undefined : value);
-      setParcelas(data as ParcelaVenda[]);
-    });
-  }
+  useEffect(() => {
+    setContas(initialContas);
+  }, [initialContas]);
 
-  function handleBaixaParcela(id: string) {
-    startTransition(async () => {
-      await darBaixaParcela(id);
-      setParcelas((prev) => prev.filter((p) => p.id !== id));
-    });
-  }
+  const totalPaginas = Math.max(1, Math.ceil(contas.length / LIMITE_CONTAS_PAGINA));
+  const paginaAtual = Math.min(paginaContas, totalPaginas);
+  const inicio = (paginaAtual - 1) * LIMITE_CONTAS_PAGINA;
+  const contasVisiveis = contas.slice(inicio, inicio + LIMITE_CONTAS_PAGINA);
+
+  useEffect(() => {
+    if (paginaContas > totalPaginas) {
+      setPaginaContas(totalPaginas);
+    }
+  }, [paginaContas, totalPaginas]);
 
   function handleBaixaConta(id: string) {
     startTransition(async () => {
-      await darBaixaConta(id);
-      setContas((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, status: "pago" as const } : c))
-      );
+      const result = await darBaixaConta(id);
+      if (result.error) {
+        toast(result.error, "error");
+        return;
+      }
+      setContas((prev) => prev.filter((c) => c.id !== id));
+      toast("Conta paga. Saiu da lista.", "success");
+      router.refresh();
     });
   }
 
-  function handleBaixaFatura(id: string) {
-    startTransition(async () => {
-      await darBaixaFatura(id);
-      setFaturas((prev) =>
-        prev.map((f) => (f.id === id ? { ...f, status: "pago" as const } : f))
-      );
-    });
+  async function gerarRelatorioPDF(periodo: PeriodoRelatorioContas) {
+    setGerandoRelatorio(periodo);
+    try {
+      const result = await getContasPagasRelatorio(periodo);
+      if ("error" in result) {
+        toast(result.error, "error");
+        return;
+      }
+      if (result.contas.length === 0) {
+        toast("Nenhuma conta paga neste período.", "info");
+        return;
+      }
+      await baixarRelatorioContasPDF(result);
+      toast("PDF do relatório baixado.", "success");
+    } catch {
+      toast("Não foi possível gerar o PDF.", "error");
+    } finally {
+      setGerandoRelatorio(null);
+    }
   }
 
   return (
@@ -121,428 +128,221 @@ export function FinanceiroModule({
       />
 
       <Tabs defaultValue="receber">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="receber">A Receber</TabsTrigger>
           <TabsTrigger value="pagar">A Pagar</TabsTrigger>
-          <TabsTrigger value="cartoes">Cartões</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="receber">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Valores a Receber</CardTitle>
-              <Select value={filtroPagamento} onValueChange={handleFiltroChange}>
-                <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Filtrar pagamento" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {FORMAS_PAGAMENTO.map((f) => (
-                    <SelectItem key={f.value} value={f.value}>
-                      {f.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardHeader>
-            <CardContent>
-              {parcelas.length === 0 ? (
-                <p className="text-brand-black/50 py-8 text-center">
-                  Nenhuma parcela pendente. 🎉
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Pagamento</TableHead>
-                      <TableHead>Parcela</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead className="text-right">Ação</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {parcelas.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell>{p.vendas?.clientes?.nome ?? "—"}</TableCell>
-                        <TableCell>
-                          {p.vendas
-                            ? PAGAMENTO_LABELS[p.vendas.forma_pagamento]
-                            : "—"}
-                        </TableCell>
-                        <TableCell>{p.numero_parcela}ª</TableCell>
-                        <TableCell>{formatDate(p.data_vencimento)}</TableCell>
-                        <TableCell className="font-medium">
-                          {formatCurrency(Number(p.valor_parcela))}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            onClick={() => handleBaixaParcela(p.id)}
-                            disabled={pending}
-                          >
-                            <CheckCircle className="h-4 w-4" />
-                            Dar Baixa
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="receber" className="space-y-4">
+          <RelatorioCrediarioRecebido />
+          <ConsultaClienteDebito clientesIniciais={clientesComSaldo} />
+          <CrediarioReceber parcelas={parcelas} />
         </TabsContent>
 
         <TabsContent value="pagar">
-          <div className="space-y-6">
+          <div className="space-y-4">
             <Card className="bg-brand-red/5 border-brand-red/20">
-              <CardContent className="pt-6">
-                <p className="text-sm text-brand-black/60">Total de boletos a pagar este mês</p>
-                <p className="text-3xl font-bold text-brand-red mt-1">
-                  {formatCurrency(totalBoletosMes)}
+              <CardContent className="pt-4 pb-4">
+                <p className="text-xs text-brand-black/60">
+                  Total a pagar em {formatMesAno()}
+                </p>
+                <p className="text-2xl font-bold text-brand-red mt-0.5">
+                  {formatCurrency(totalAPagarMes)}
                 </p>
               </CardContent>
             </Card>
 
-            <div className="flex justify-end">
-              <Dialog>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-red">
+                  Relatório PDF
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {RELATORIOS_PAGAR.map((rel) => (
+                    <Button
+                      key={rel.id}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="touch-manipulation"
+                      disabled={gerandoRelatorio !== null}
+                      onClick={() => gerarRelatorioPDF(rel.id)}
+                    >
+                      {gerandoRelatorio === rel.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <FileDown className="h-4 w-4" />
+                      )}
+                      {rel.label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-brand-black/45">
+                  Contas pagas ficam só no banco. O app mostra só as pendentes.
+                </p>
+              </div>
+
+              <Dialog open={dialogContaAberto} onOpenChange={setDialogContaAberto}>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button size="sm">
                     <Plus className="h-4 w-4" />
-                    Cadastrar Boleto
+                    Cadastrar Conta
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Cadastrar Boleto de Fornecedor</DialogTitle>
+                    <DialogTitle>Cadastrar Conta a Pagar</DialogTitle>
                   </DialogHeader>
-                  <ContaForm />
+                  <ContaForm
+                    onSucesso={() => {
+                      setDialogContaAberto(false);
+                      router.refresh();
+                    }}
+                  />
                 </DialogContent>
               </Dialog>
             </div>
 
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Fornecedor / Descrição</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ação</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {contas.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.descricao}</TableCell>
-                    <TableCell>{formatDate(c.data_vencimento)}</TableCell>
-                    <TableCell>{formatCurrency(Number(c.valor))}</TableCell>
-                    <TableCell>
-                      <Badge variant={c.status === "pago" ? "success" : "warning"}>
-                        {c.status === "pago" ? "Pago" : "Pendente"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {c.status === "pendente" && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleBaixaConta(c.id)}
-                          disabled={pending}
-                        >
-                          Dar Baixa
-                        </Button>
-                      )}
-                    </TableCell>
+            <div className="rounded-xl border border-brand-red/15 bg-gradient-to-br from-brand-red/[0.08] via-brand-cream/70 to-brand-cream shadow-sm shadow-brand-red/[0.05] [&>div]:border-0 [&>div]:rounded-none">
+              <Table className="text-xs bg-transparent">
+                <TableHeader className="bg-brand-red/[0.06]">
+                  <TableRow>
+                    <TableHead className="h-8 px-2 py-1 text-[10px]">Descrição</TableHead>
+                    <TableHead className="h-8 px-2 py-1 text-[10px]">Parcela</TableHead>
+                    <TableHead className="h-8 px-2 py-1 text-[10px]">Vencimento</TableHead>
+                    <TableHead className="h-8 px-2 py-1 text-[10px]">Valor</TableHead>
+                    <TableHead className="h-8 px-2 py-1 text-[10px]">Status</TableHead>
+                    <TableHead className="h-8 px-2 py-1 text-[10px] text-right">Ação</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
+                </TableHeader>
+                <TableBody className="bg-transparent">
+                  {contas.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="px-2 py-6 text-center text-brand-black/50"
+                      >
+                        Nenhuma conta pendente.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    contasVisiveis.map((c) => (
+                      <TableRow key={c.id} className="h-11 hover:bg-brand-red/[0.06]">
+                        <TableCell className="px-2 py-2 align-middle font-medium">
+                          {c.descricao}
+                        </TableCell>
+                        <TableCell className="px-2 py-2 align-middle">
+                          {(c.parcelas_totais ?? 1) > 1
+                            ? `${c.parcela_atual ?? 1}/${c.parcelas_totais}`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="px-2 py-2 align-middle">
+                          {formatDate(c.data_vencimento)}
+                        </TableCell>
+                        <TableCell className="px-2 py-2 align-middle tabular-nums">
+                          {formatCurrency(Number(c.valor))}
+                        </TableCell>
+                        <TableCell className="px-2 py-2 align-middle">
+                          <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+                            Pendente
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-2 py-2 align-middle text-right">
+                          <Button
+                            size="sm"
+                            className="h-8 text-xs px-2 touch-manipulation"
+                            onClick={() => handleBaixaConta(c.id)}
+                            disabled={pending}
+                          >
+                            Dar Baixa
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
-        <TabsContent value="cartoes">
-          <CartoesTab
-            cartoes={initialCartoes}
-            faturas={faturas}
-            resumoCartoes={resumoCartoes}
-            onBaixaFatura={handleBaixaFatura}
-            pending={pending}
-          />
+            {contas.length > LIMITE_CONTAS_PAGINA && (
+              <ListaPaginacao
+                paginaAtual={paginaAtual}
+                totalPaginas={totalPaginas}
+                onSelecionarPagina={setPaginaContas}
+                onProximaPagina={() => setPaginaContas((p) => Math.min(p + 1, totalPaginas))}
+              />
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function ContaForm() {
+function ContaForm({ onSucesso }: { onSucesso: () => void }) {
+  const [parcelas, setParcelas] = useState(1);
+  const [valor, setValor] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    setError(null);
+
+    if (valor <= 0) {
+      setError("Informe um valor maior que zero.");
+      return;
+    }
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    formData.set("valor", String(valor));
+    formData.set("parcelas", String(parcelas));
+
     startTransition(async () => {
       const result = await createContaAPagar(formData);
-      if (result.error) setError(result.error);
-      else window.location.reload();
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      form.reset();
+      setValor(0);
+      setParcelas(1);
+      setError(null);
+      onSucesso();
     });
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="descricao">Fornecedor / Descrição</Label>
-        <Input id="descricao" name="descricao" required placeholder="Nome do fornecedor" />
+        <Label htmlFor="descricao">O que você deve? (fornecedor, boleto, etc.)</Label>
+        <Input id="descricao" name="descricao" required placeholder="Ex: Fornecedor X, aluguel..." />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor="valor">Valor</Label>
-          <Input id="valor" name="valor" type="number" step="0.01" min="0" required />
+          <Label htmlFor="valor">Valor total</Label>
+          <InputMoeda id="valor" value={valor} onChange={setValor} required />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="data_vencimento">Vencimento</Label>
+          <Label htmlFor="data_vencimento">1º vencimento</Label>
           <Input id="data_vencimento" name="data_vencimento" type="date" required />
         </div>
       </div>
+      <SelecaoBotoes
+        label="Número de vezes"
+        opcoes={OPCOES_PARCELAS}
+        value={parcelas}
+        onChange={setParcelas}
+      />
+      {parcelas > 1 && (
+        <p className="text-xs text-brand-black/60">
+          Serão criadas {parcelas} parcelas, uma a cada 30 dias, com o valor dividido igualmente.
+        </p>
+      )}
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? "Salvando..." : "Cadastrar Boleto"}
-      </Button>
-    </form>
-  );
-}
-
-function CartoesTab({
-  cartoes,
-  faturas,
-  resumoCartoes,
-  onBaixaFatura,
-  pending,
-}: {
-  cartoes: CartaoCredito[];
-  faturas: FaturaCartao[];
-  resumoCartoes: FinanceiroModuleProps["resumoCartoes"];
-  onBaixaFatura: (id: string) => void;
-  pending: boolean;
-}) {
-  const [openCartao, setOpenCartao] = useState(false);
-  const [openFatura, setOpenFatura] = useState(false);
-
-  return (
-    <div className="space-y-6">
-      {resumoCartoes.map(({ cartao, total, diaVencimento }) => (
-        <Card key={cartao.id} className="border-brand-red/20 bg-brand-cream/30">
-          <CardContent className="pt-6">
-            <p className="text-base text-brand-black">
-              A fatura do Cartão{" "}
-              <strong className="text-brand-red">{cartao.nome_cartao}</strong> para o mês
-              atual é{" "}
-              <strong>{formatCurrency(total)}</strong> e vence no dia{" "}
-              <strong>{diaVencimento}</strong>.
-            </p>
-          </CardContent>
-        </Card>
-      ))}
-
-      <div className="flex flex-wrap gap-3 justify-end">
-        <Dialog open={openCartao} onOpenChange={setOpenCartao}>
-          <DialogTrigger asChild>
-            <Button variant="secondary">
-              <Plus className="h-4 w-4" />
-              Cadastrar Cartão
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Cadastrar Cartão da Empresa</DialogTitle>
-            </DialogHeader>
-            <CartaoForm onDone={() => setOpenCartao(false)} />
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={openFatura} onOpenChange={setOpenFatura}>
-          <DialogTrigger asChild>
-            <Button disabled={cartoes.length === 0}>
-              <Plus className="h-4 w-4" />
-              Lançar Compra no Cartão
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Lançar Compra Parcelada</DialogTitle>
-            </DialogHeader>
-            <FaturaForm cartoes={cartoes} onDone={() => setOpenFatura(false)} />
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Cartão</TableHead>
-            <TableHead>Descrição</TableHead>
-            <TableHead>Parcela</TableHead>
-            <TableHead>Vencimento</TableHead>
-            <TableHead>Valor</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Ação</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {faturas.map((f) => (
-            <TableRow key={f.id}>
-              <TableCell>{f.cartoes_credito?.nome_cartao ?? "—"}</TableCell>
-              <TableCell>{f.descricao}</TableCell>
-              <TableCell>
-                {f.parcela_atual}/{f.parcelas_totais}
-              </TableCell>
-              <TableCell>{formatDate(f.data_vencimento_fatura)}</TableCell>
-              <TableCell>{formatCurrency(Number(f.valor_total))}</TableCell>
-              <TableCell>
-                <Badge variant={f.status === "pago" ? "success" : "warning"}>
-                  {f.status === "pago" ? "Pago" : "Pendente"}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-right">
-                {f.status === "pendente" && (
-                  <Button size="sm" onClick={() => onBaixaFatura(f.id)} disabled={pending}>
-                    Dar Baixa
-                  </Button>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-function CartaoForm({ onDone }: { onDone: () => void }) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    startTransition(async () => {
-      const result = await createCartao(formData);
-      if (result.error) setError(result.error);
-      else {
-        onDone();
-        window.location.reload();
-      }
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="nome_cartao">Nome do Cartão</Label>
-        <Input id="nome_cartao" name="nome_cartao" required placeholder="Ex: Nubank Empresa" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="dia_vencimento">Dia do Vencimento</Label>
-          <Input
-            id="dia_vencimento"
-            name="dia_vencimento"
-            type="number"
-            min={1}
-            max={31}
-            required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="limite">Limite (opcional)</Label>
-          <Input id="limite" name="limite" type="number" step="0.01" min="0" />
-        </div>
-      </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? "Salvando..." : "Cadastrar Cartão"}
-      </Button>
-    </form>
-  );
-}
-
-function FaturaForm({
-  cartoes,
-  onDone,
-}: {
-  cartoes: CartaoCredito[];
-  onDone: () => void;
-}) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    startTransition(async () => {
-      const result = await createFaturaCartao({
-        cartao_id: (form.elements.namedItem("cartao_id") as HTMLSelectElement).value,
-        descricao: (form.elements.namedItem("descricao") as HTMLInputElement).value,
-        valor_total: Number((form.elements.namedItem("valor_total") as HTMLInputElement).value),
-        parcelas_totais: Number(
-          (form.elements.namedItem("parcelas_totais") as HTMLInputElement).value
-        ),
-        data_compra: (form.elements.namedItem("data_compra") as HTMLInputElement).value,
-      });
-      if (result.error) setError(result.error);
-      else {
-        onDone();
-        window.location.reload();
-      }
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="cartao_id">Cartão</Label>
-        <select
-          id="cartao_id"
-          name="cartao_id"
-          required
-          className="flex h-11 w-full rounded-lg border border-brand-black/15 bg-white px-4 py-2 text-base"
-        >
-          {cartoes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nome_cartao}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="descricao">Descrição da Compra</Label>
-        <Input id="descricao" name="descricao" required placeholder="Ex: Material de embalagem" />
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="valor_total">Valor Total</Label>
-          <Input id="valor_total" name="valor_total" type="number" step="0.01" min="0" required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="parcelas_totais">Parcelas</Label>
-          <Input id="parcelas_totais" name="parcelas_totais" type="number" min={1} defaultValue={1} required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="data_compra">Data da Compra</Label>
-          <Input
-            id="data_compra"
-            name="data_compra"
-            type="date"
-            required
-            defaultValue={new Date().toISOString().split("T")[0]}
-          />
-        </div>
-      </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? "Salvando..." : "Lançar Compra"}
+        {pending ? "Salvando..." : parcelas > 1 ? `Cadastrar ${parcelas} parcelas` : "Cadastrar"}
       </Button>
     </form>
   );
