@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { AppMessagesProvider } from "@/components/ui/app-messages";
 import { NavigationProvider } from "./navigation-context";
-import { prefetchAllPages } from "@/lib/queries/page-cache";
+import { prefetchAllPages, prefetchDashboardFirst } from "@/lib/queries/page-cache";
+import { createClient } from "@/lib/supabase/client";
 import "@/lib/queries/fetch-page-data";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -15,10 +16,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isLogin) return;
+
+    prefetchDashboardFirst();
+    prefetchAllPages();
+
     const rotas = ["/dashboard", "/estoque", "/clientes", "/vendas", "/financeiro"];
     rotas.forEach((href) => router.prefetch(href));
-    const timer = window.setTimeout(() => prefetchAllPages(), 300);
-    return () => window.clearTimeout(timer);
+
+    void createClient()
+      .from("produtos")
+      .select("id")
+      .limit(1)
+      .then(() => {});
   }, [router, isLogin]);
 
   if (isLogin) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import {
   fetchWithCache,
   readPageCache,
@@ -8,12 +8,12 @@ import {
 } from "@/lib/queries/page-cache";
 
 /**
- * Mostra cache na hora (se existir) e atualiza em segundo plano.
+ * Mostra cache na hora (memória ou localStorage) e atualiza em segundo plano.
  */
 export function usePageData<T>(cacheKey: string, fetcher: () => Promise<T>) {
   const [data, setData] = useState<T | null>(() => readPageCache<T>(cacheKey));
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let cancelled = false;
     const hadCache = Boolean(readPageCache<T>(cacheKey));
 

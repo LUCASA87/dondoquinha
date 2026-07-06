@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginAction } from "@/app/actions/auth";
+import {
+  prefetchDashboardParcelas,
+  prefetchDashboardResumo,
+} from "@/lib/queries/fetch-page-data";
+import "@/lib/queries/fetch-page-data";
 
 interface LoginFormProps {
   redirectTo: string;
@@ -16,9 +21,17 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [pending, startTransition] = useTransition();
 
+  useEffect(() => {
+    prefetchDashboardResumo();
+    prefetchDashboardParcelas();
+  }, []);
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+
+    prefetchDashboardResumo();
+    prefetchDashboardParcelas();
 
     const formData = new FormData(e.currentTarget);
     formData.set("redirect", redirectTo);

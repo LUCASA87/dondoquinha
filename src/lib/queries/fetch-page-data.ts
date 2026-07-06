@@ -67,8 +67,7 @@ export async function fetchDashboardResumo() {
 export async function fetchDashboardParcelas() {
   return fetchWithCache(PAGE_CACHE_KEYS.dashboardParcelas, () =>
     queryParcelasAVencer(createClient(), 30, {
-      buscarProdutos: true,
-      limiteProdutos: 5,
+      buscarProdutos: false,
     })
   );
 }
@@ -125,6 +124,8 @@ export async function fetchClientes() {
 }
 
 registerPagePrefetcher(PAGE_CACHE_KEYS.dashboard, fetchDashboardPageData);
+registerPagePrefetcher(PAGE_CACHE_KEYS.dashboardResumo, fetchDashboardResumo);
+registerPagePrefetcher(PAGE_CACHE_KEYS.dashboardParcelas, fetchDashboardParcelas);
 registerPagePrefetcher(PAGE_CACHE_KEYS.estoque, fetchProdutos);
 registerPagePrefetcher(PAGE_CACHE_KEYS.clientes, fetchClientes);
 registerPagePrefetcher(PAGE_CACHE_KEYS.vendas, fetchVendasPageData);
