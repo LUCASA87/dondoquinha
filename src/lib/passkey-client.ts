@@ -11,6 +11,7 @@ import {
   setStoredPasskeyId,
   getStoredPasskeyId,
   clearStoredPasskeyId,
+  isMobileDevice,
 } from "@/lib/pwa-utils";
 
 export interface PasskeyRecord {
@@ -43,12 +44,14 @@ export async function hasRegisteredPasskey(): Promise<boolean> {
 }
 
 export async function canUsePasskeyLogin(): Promise<boolean> {
+  if (!isMobileDevice()) return false;
   if (!browserSupportsWebAuthn()) return false;
   if (!(await platformAuthenticatorIsAvailable())) return false;
   return hasRegisteredPasskey();
 }
 
 export async function canActivatePasskeyLogin(): Promise<boolean> {
+  if (!isMobileDevice()) return false;
   if (!browserSupportsWebAuthn()) return false;
   if (!(await platformAuthenticatorIsAvailable())) return false;
   return !(await hasRegisteredPasskey());
