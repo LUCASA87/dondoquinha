@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { AppMessagesProvider } from "@/components/ui/app-messages";
 import { NavigationProvider } from "./navigation-context";
+import { prefetchAllPages } from "@/lib/queries/page-cache";
+import "@/lib/queries/fetch-page-data";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -15,6 +17,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (isLogin) return;
     const rotas = ["/dashboard", "/estoque", "/clientes", "/vendas", "/financeiro"];
     rotas.forEach((href) => router.prefetch(href));
+    const timer = window.setTimeout(() => prefetchAllPages(), 300);
+    return () => window.clearTimeout(timer);
   }, [router, isLogin]);
 
   if (isLogin) {

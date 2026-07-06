@@ -29,6 +29,7 @@ import { ComprovantePagamento } from "@/components/financeiro/comprovante-pagame
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { filtrarParcelasPagaveis } from "@/lib/parcelas-utils";
+import { invalidateAfterFinanceiroChange } from "@/lib/queries/page-cache";
 import type { ParcelaVenda } from "@/types/database";
 import type { ComprovantePagamentoData } from "@/lib/store";
 
@@ -142,6 +143,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
           .filter(Boolean) as ParcelaAberta[]
       );
 
+      invalidateAfterFinanceiroChange();
       fecharPagamento();
     });
   }
@@ -165,6 +167,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
         return;
       }
       toast("Parcela excluída.", "success");
+      invalidateAfterFinanceiroChange();
       setParcelas((prev) => prev.filter((item) => item.id !== p.id));
     });
   }

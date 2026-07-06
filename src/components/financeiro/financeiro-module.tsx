@@ -39,6 +39,7 @@ import { SelecaoBotoes, OPCOES_PARCELAS } from "@/components/ui/selecao-botoes";
 import { InputMoeda } from "@/components/ui/input-moeda";
 import { baixarRelatorioContasPDF } from "@/lib/relatorio-contas-pagar-pdf";
 import { formatCurrency, formatDate, formatMesAno } from "@/lib/format";
+import { invalidateAfterFinanceiroChange } from "@/lib/queries/page-cache";
 import type { ParcelaVenda, ContaAPagar } from "@/types/database";
 
 const LIMITE_CONTAS_PAGINA = 5;
@@ -90,6 +91,7 @@ export function FinanceiroModule({
         return;
       }
       setContas((prev) => prev.filter((c) => c.id !== id));
+      invalidateAfterFinanceiroChange();
       toast("Conta paga. Saiu da lista.", "success");
     });
   }

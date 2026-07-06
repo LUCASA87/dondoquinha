@@ -27,6 +27,7 @@ import { useAppMessages } from "@/components/ui/app-messages";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatItemNome } from "@/lib/format";
 import type { Produto } from "@/types/database";
+import { invalidateAfterEstoqueChange } from "@/lib/queries/page-cache";
 
 interface ProdutosTableProps {
   produtos: Produto[];
@@ -65,6 +66,7 @@ function ProdutoForm({
       if (result.error) {
         setError(result.error);
       } else {
+        invalidateAfterEstoqueChange();
         onDone();
       }
     });
@@ -150,6 +152,7 @@ export function ProdutosTable({ produtos }: ProdutosTableProps) {
       if (result.error) {
         toast(result.error, "error");
       } else {
+        invalidateAfterEstoqueChange();
         toast("Produto excluído com sucesso.", "success");
       }
     });

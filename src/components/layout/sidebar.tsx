@@ -20,6 +20,11 @@ import { Button } from "@/components/ui/button";
 import { logoutAction } from "@/app/actions/auth";
 import { TrocarSenhaDialog } from "@/components/auth/trocar-senha-dialog";
 import { useNavigation } from "./navigation-context";
+import { prefetchPageByRoute } from "@/lib/queries/page-cache";
+import {
+  prefetchDashboardParcelas,
+  prefetchDashboardResumo,
+} from "@/lib/queries/fetch-page-data";
 
 const navItems = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard },
@@ -39,6 +44,14 @@ export function Sidebar() {
   useEffect(() => {
     navItems.forEach(({ href }) => router.prefetch(href));
   }, [router]);
+
+  function handleNavHover(href: string) {
+    prefetchPageByRoute(href);
+    if (href === "/dashboard") {
+      prefetchDashboardResumo();
+      prefetchDashboardParcelas();
+    }
+  }
 
   function handleNavClick() {
     startNavigation();
@@ -111,6 +124,8 @@ export function Sidebar() {
                 key={href}
                 href={href}
                 prefetch
+                onMouseEnter={() => handleNavHover(href)}
+                onFocus={() => handleNavHover(href)}
                 onClick={handleNavClick}
                 className={cn(
                   "flex items-center gap-3 rounded-xl px-4 py-3.5 text-base font-medium transition-all",

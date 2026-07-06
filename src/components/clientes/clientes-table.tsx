@@ -33,6 +33,7 @@ import { formatCPF, formatPhone } from "@/lib/format";
 import { mensagemWhatsAppCliente } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";
 import type { Cliente } from "@/types/database";
+import { invalidateAfterClientesChange } from "@/lib/queries/page-cache";
 
 interface ClientesTableProps {
   clientes: Cliente[];
@@ -61,6 +62,7 @@ function ClienteForm({
       if (result.error) {
         setError(result.error);
       } else {
+        invalidateAfterClientesChange();
         onDone();
       }
     });
@@ -147,6 +149,7 @@ export function ClientesTable({ clientes }: ClientesTableProps) {
       if (result.error) {
         toast(result.error, "error");
       } else {
+        invalidateAfterClientesChange();
         toast("Cliente excluída com sucesso.", "success");
       }
     });

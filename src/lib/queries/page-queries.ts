@@ -40,7 +40,9 @@ export async function queryDashboardStats(
 export async function queryContasAPagar(supabase: SupabaseClient): Promise<ContaAPagar[]> {
   const { data, error } = await supabase
     .from("contas_a_pagar")
-    .select("*")
+    .select(
+      "id, descricao, valor, data_vencimento, status, parcelas_totais, parcela_atual, data_pagamento, created_at"
+    )
     .eq("status", "pendente")
     .order("data_vencimento");
 
@@ -79,10 +81,13 @@ export async function queryParcelasAVencer(
 
   const { data, error } = await supabase
     .from("parcelas_vendas")
-    .select("*, vendas(id, parcelas, clientes(id, nome, telefone))")
+    .select(
+      "id, venda_id, numero_parcela, valor_parcela, valor_pago, data_vencimento, vendas(id, parcelas, clientes(id, nome, telefone))"
+    )
     .eq("status", "pendente")
     .lte("data_vencimento", limiteStr)
-    .order("data_vencimento");
+    .order("data_vencimento")
+    .limit(80);
 
   if (error || !data) return [];
 
@@ -94,7 +99,9 @@ export async function queryParcelasAVencer(
     }))
     .filter((p) => p.saldo_parcela > 0.001);
 
-  const proximas = filtrarParcelasPagaveis(comSaldo);
+  const proximas = filtrarParcelasPagaveis(
+    comSaldo as unknown as Parameters<typeof filtrarParcelasPagaveis>[0]
+  );
 
   let produtosPorVenda = new Map<string, string[]>();
   if (buscarProdutos && proximas.length > 0) {
@@ -110,8 +117,9 @@ export async function queryParcelasAVencer(
   }
 
   return proximas
-    .map((p) => {
-      const venda = p.vendas as {
+    .map((raw) => {
+      const p = raw as unknown as (typeof comSaldo)[number];
+      const venda = p.vendas as unknown as {
         id: string;
         parcelas: number;
         clientes: { id: string; nome: string; telefone: string | null } | null;
@@ -124,7 +132,7 @@ export async function queryParcelasAVencer(
       else if (venc === hojeStr) status_vencimento = "hoje";
       else status_vencimento = "a_vencer";
 
-      const vendaId = venda?.id ?? p.venda_id;
+      const vendaId = venda?.id ?? p.venda_id ?? "";
 
       return {
         id: p.id,
@@ -186,10 +194,12 @@ export async function queryVendas(
 ): Promise<(Venda & { clientes: { nome: string } | null })[]> {
   const { data, error } = await supabase
     .from("vendas")
-    .select("*, clientes(nome)")
+    .select(
+      "id, cliente_id, valor_total, forma_pagamento, parcelas, status, obs, data_venda, created_at, clientes(nome)"
+    )
     .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error) return [];
-  return data as (Venda & { clientes: { nome: string } | null })[];
+  return data as unknown as (Venda & { clientes: { nome: string } | null })[];
 }

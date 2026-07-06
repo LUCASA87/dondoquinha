@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchDashboardPageData } from "@/lib/queries/fetch-page-data";
+import {
+  fetchDashboardParcelas,
+  fetchDashboardResumo,
+} from "@/lib/queries/fetch-page-data";
+import { PAGE_CACHE_KEYS } from "@/lib/queries/page-cache";
+import { usePageData } from "@/hooks/use-page-data";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { ParcelasAVencer } from "@/components/dashboard/parcelas-a-vencer";
@@ -9,19 +13,8 @@ import { NovaCompraButton } from "@/components/dashboard/nova-compra-button";
 import { StatsCardsSkeleton, ParcelasSkeleton } from "@/components/ui/page-loading";
 
 export default function DashboardPage() {
-  const [data, setData] = useState<Awaited<ReturnType<typeof fetchDashboardPageData>> | null>(
-    null
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchDashboardPageData().then((result) => {
-      if (!cancelled) setData(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const resumo = usePageData(PAGE_CACHE_KEYS.dashboardResumo, fetchDashboardResumo);
+  const parcelas = usePageData(PAGE_CACHE_KEYS.dashboardParcelas, fetchDashboardParcelas);
 
   return (
     <div className="space-y-4">
@@ -39,21 +32,17 @@ export default function DashboardPage() {
         }
       />
 
-      {!data ? (
-        <>
-          <StatsCardsSkeleton />
-          <ParcelasSkeleton />
-        </>
+      {!resumo ? (
+        <StatsCardsSkeleton />
       ) : (
-        <>
-          <StatsCards
-            initialStats={data.stats}
-            totalAPagar={data.totalAPagar}
-            totalAReceber={data.totalAReceber}
-          />
-          <ParcelasAVencer initialParcelas={data.parcelas} />
-        </>
+        <StatsCards
+          initialStats={resumo.stats}
+          totalAPagar={resumo.totalAPagar}
+          totalAReceber={resumo.totalAReceber}
+        />
       )}
+
+      {!parcelas ? <ParcelasSkeleton /> : <ParcelasAVencer initialParcelas={parcelas} />}
     </div>
   );
 }

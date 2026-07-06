@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
 import {
+  PAGE_CACHE_KEYS,
+  fetchWithCache,
+  prefetchPageCache,
+  registerPagePrefetcher,
+} from "@/lib/queries/page-cache";
+import {
   queryClientes,
   queryContasAPagar,
   queryDashboardStats,
@@ -9,53 +15,125 @@ import {
   queryTotalAReceber,
   queryVendas,
 } from "@/lib/queries/page-queries";
+import type { DashboardStats } from "@/types/database";
 
-/** Busca dados direto no Supabase pelo navegador — sem passar pelo servidor Next.js. */
-export async function fetchDashboardPageData() {
-  const supabase = createClient();
-  const [stats, contas, totalAReceber, parcelas] = await Promise.all([
+interface DashboardResumoRpc {
+  total_custo: number;
+  total_venda: number;
+  lucro_estimado: number;
+  total_a_receber: number;
+  total_a_pagar: number;
+}
+
+async function queryDashboardResumoRpc(supabase: ReturnType<typeof createClient>) {
+  const { data, error } = await supabase.rpc("get_dashboard_resumo");
+  if (error || !data) return null;
+
+  const r = data as DashboardResumoRpc;
+  return {
+    stats: {
+      totalCusto: Number(r.total_custo),
+      totalVenda: Number(r.total_venda),
+      lucroEstimado: Number(r.lucro_estimado),
+    } satisfies DashboardStats,
+    totalAPagar: Number(r.total_a_pagar),
+    totalAReceber: Number(r.total_a_receber),
+  };
+}
+
+async function queryDashboardResumoFallback(supabase: ReturnType<typeof createClient>) {
+  const [stats, contas, totalAReceber] = await Promise.all([
     queryDashboardStats(supabase),
     queryContasAPagar(supabase),
     queryTotalAReceber(supabase),
-    queryParcelasAVencer(supabase, 30, { buscarProdutos: true, limiteProdutos: 5 }),
   ]);
-
   return {
     stats,
     totalAPagar: contas.reduce((sum, c) => sum + Number(c.valor), 0),
     totalAReceber,
-    parcelas,
   };
+}
+
+/** Cards do dashboard — consulta única via RPC quando disponível. */
+export async function fetchDashboardResumo() {
+  return fetchWithCache(PAGE_CACHE_KEYS.dashboardResumo, async () => {
+    const supabase = createClient();
+    const rpc = await queryDashboardResumoRpc(supabase);
+    if (rpc) return rpc;
+    return queryDashboardResumoFallback(supabase);
+  });
+}
+
+export async function fetchDashboardParcelas() {
+  return fetchWithCache(PAGE_CACHE_KEYS.dashboardParcelas, () =>
+    queryParcelasAVencer(createClient(), 30, {
+      buscarProdutos: true,
+      limiteProdutos: 5,
+    })
+  );
+}
+
+/** Busca dados direto no Supabase pelo navegador — com cache em memória. */
+export async function fetchDashboardPageData() {
+  return fetchWithCache(PAGE_CACHE_KEYS.dashboard, async () => {
+    const [resumo, parcelas] = await Promise.all([
+      fetchDashboardResumo(),
+      fetchDashboardParcelas(),
+    ]);
+    return { ...resumo, parcelas };
+  });
 }
 
 export async function fetchVendasPageData() {
-  const supabase = createClient();
-  const [clientes, produtos, vendas] = await Promise.all([
-    queryClientes(supabase),
-    queryProdutos(supabase),
-    queryVendas(supabase),
-  ]);
-  return { clientes, produtos, vendas };
+  return fetchWithCache(PAGE_CACHE_KEYS.vendas, async () => {
+    const supabase = createClient();
+    const [clientes, produtos, vendas] = await Promise.all([
+      fetchClientes(),
+      fetchProdutos(),
+      queryVendas(supabase),
+    ]);
+    return { clientes, produtos, vendas };
+  });
 }
 
 export async function fetchFinanceiroPageData() {
-  const supabase = createClient();
-  const [parcelas, contas] = await Promise.all([
-    queryParcelasAbertas(supabase),
-    queryContasAPagar(supabase),
-  ]);
+  return fetchWithCache(PAGE_CACHE_KEYS.financeiro, async () => {
+    const supabase = createClient();
+    const [parcelas, contas] = await Promise.all([
+      queryParcelasAbertas(supabase),
+      queryContasAPagar(supabase),
+    ]);
 
-  return {
-    parcelas,
-    contas,
-    totalAPagarMes: contas.reduce((sum, c) => sum + Number(c.valor), 0),
-  };
+    return {
+      parcelas,
+      contas,
+      totalAPagarMes: contas.reduce((sum, c) => sum + Number(c.valor), 0),
+    };
+  });
 }
 
 export async function fetchProdutos() {
-  return queryProdutos(createClient());
+  return fetchWithCache(PAGE_CACHE_KEYS.estoque, () =>
+    queryProdutos(createClient())
+  );
 }
 
 export async function fetchClientes() {
-  return queryClientes(createClient());
+  return fetchWithCache(PAGE_CACHE_KEYS.clientes, () =>
+    queryClientes(createClient())
+  );
+}
+
+registerPagePrefetcher(PAGE_CACHE_KEYS.dashboard, fetchDashboardPageData);
+registerPagePrefetcher(PAGE_CACHE_KEYS.estoque, fetchProdutos);
+registerPagePrefetcher(PAGE_CACHE_KEYS.clientes, fetchClientes);
+registerPagePrefetcher(PAGE_CACHE_KEYS.vendas, fetchVendasPageData);
+registerPagePrefetcher(PAGE_CACHE_KEYS.financeiro, fetchFinanceiroPageData);
+
+export function prefetchDashboardResumo() {
+  prefetchPageCache(PAGE_CACHE_KEYS.dashboardResumo, fetchDashboardResumo);
+}
+
+export function prefetchDashboardParcelas() {
+  prefetchPageCache(PAGE_CACHE_KEYS.dashboardParcelas, fetchDashboardParcelas);
 }
