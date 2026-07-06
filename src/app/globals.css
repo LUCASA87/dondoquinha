@@ -45,6 +45,20 @@ body {
   color: var(--brand-black);
 }
 
+@keyframes brand-spinner-fade {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.brand-spinner-bar {
+  animation: brand-spinner-fade 1.1s ease-in-out infinite;
+}
+
 .font-serif {
   font-family: var(--font-playfair), Georgia, serif;
 }

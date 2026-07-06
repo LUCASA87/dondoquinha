@@ -13,14 +13,13 @@ import {
 export async function loginAction(formData: FormData) {
   const username = String(formData.get("username") ?? "");
   const password = String(formData.get("password") ?? "");
-  const redirectTo = String(formData.get("redirect") ?? "/dashboard");
 
   if (!(await validateStoredCredentials(username, password))) {
     return { error: "Usuário ou senha incorretos." };
   }
 
   await setSessionCookie(username);
-  redirect(redirectTo.startsWith("/") ? redirectTo : "/dashboard");
+  return { success: true as const };
 }
 
 export async function changePasswordAction(

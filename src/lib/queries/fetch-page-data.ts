@@ -131,6 +131,17 @@ registerPagePrefetcher(PAGE_CACHE_KEYS.clientes, fetchClientes);
 registerPagePrefetcher(PAGE_CACHE_KEYS.vendas, fetchVendasPageData);
 registerPagePrefetcher(PAGE_CACHE_KEYS.financeiro, fetchFinanceiroPageData);
 
+export async function fetchAllAppData(): Promise<void> {
+  await Promise.all([
+    fetchDashboardResumo(),
+    fetchDashboardParcelas(),
+    fetchProdutos(),
+    fetchClientes(),
+    fetchVendasPageData(),
+    fetchFinanceiroPageData(),
+  ]);
+}
+
 export function prefetchDashboardResumo() {
   prefetchPageCache(PAGE_CACHE_KEYS.dashboardResumo, fetchDashboardResumo);
 }
