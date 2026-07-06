@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,14 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginAction } from "@/app/actions/auth";
 import { LoginLoadingOverlay } from "@/components/ui/brand-spinner";
-import { useAppMessages } from "@/components/ui/app-messages";
 import { prefetchAllAppData } from "@/lib/queries/fetch-page-data";
-import {
-  isPasskeyLoginAvailable,
-  registerPasskeyOnDevice,
-} from "@/lib/passkey-client";
-import { platformAuthenticatorIsAvailable } from "@simplewebauthn/browser";
 import { LoginBiometria } from "@/components/auth/login-biometria";
+import { AtivarLoginCelular } from "@/components/auth/ativar-login-celular";
 import "@/lib/queries/fetch-page-data";
 
 interface LoginFormProps {
@@ -24,44 +19,18 @@ interface LoginFormProps {
 
 export function LoginForm({ redirectTo }: LoginFormProps) {
   const router = useRouter();
-  const { confirm, toast } = useAppMessages();
   const [error, setError] = useState<string | null>(null);
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [carregando, setCarregando] = useState(false);
-  const [temBiometria, setTemBiometria] = useState(false);
+  const [temLoginCelular, setTemLoginCelular] = useState(false);
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    void isPasskeyLoginAvailable().then(setTemBiometria);
-  }, []);
-
-  async function oferecerLoginRapido() {
-    try {
-      const jaTemPasskey = await isPasskeyLoginAvailable();
-      if (jaTemPasskey) return;
-
-      const biometriaDisponivel = await platformAuthenticatorIsAvailable();
-      if (!biometriaDisponivel) return;
-
-      const ativar = await confirm({
-        title: "Login rápido neste celular",
-        message:
-          "Deseja ativar entrada com digital ou Face ID para os próximos acessos?",
-        confirmLabel: "Ativar",
-        cancelLabel: "Agora não",
-      });
-
-      if (!ativar) return;
-
-      setCarregando(true);
-      await registerPasskeyOnDevice();
-      toast("Login rápido ativado neste aparelho.", "success");
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Não foi possível ativar o login rápido.";
-      toast(message, "error");
-    } finally {
-      setCarregando(false);
-    }
+  function getCredentials() {
+    return {
+      username: usernameRef.current?.value ?? "dondoquinha",
+      password: passwordRef.current?.value ?? "",
+    };
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -82,10 +51,6 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
       }
 
       prefetchAllAppData();
-      setCarregando(false);
-
-      await oferecerLoginRapido();
-
       router.push(destino);
       router.refresh();
     } catch {
@@ -98,9 +63,13 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
     <>
       {carregando && <LoginLoadingOverlay />}
 
-      <LoginBiometria redirectTo={redirectTo} disabled={carregando} />
+      <LoginBiometria
+        redirectTo={redirectTo}
+        disabled={carregando}
+        onDisponivelChange={setTemLoginCelular}
+      />
 
-      {temBiometria && (
+      {temLoginCelular && (
         <div className="relative my-5">
           <div className="absolute inset-0 flex items-center">
             <span className="w-full border-t border-brand-red/15" />
@@ -117,6 +86,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
           <Input
             id="username"
             name="username"
+            ref={usernameRef}
             autoComplete="username"
             required
             defaultValue="dondoquinha"
@@ -131,6 +101,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
             <Input
               id="password"
               name="password"
+              ref={passwordRef}
               type={mostrarSenha ? "text" : "password"}
               autoComplete="current-password"
               required
@@ -154,6 +125,21 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
           {carregando ? "Entrando..." : "Entrar"}
         </Button>
       </form>
+
+      {!temLoginCelular && (
+        <div className="mt-4">
+          <AtivarLoginCelular
+            disabled={carregando}
+            getCredentials={getCredentials}
+            onAtivado={() => {
+              setTemLoginCelular(true);
+              const destino = redirectTo.startsWith("/") ? redirectTo : "/dashboard";
+              router.push(destino);
+              router.refresh();
+            }}
+          />
+        </div>
+      )}
     </>
   );
 }

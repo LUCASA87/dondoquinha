@@ -2,27 +2,35 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Fingerprint } from "lucide-react";
+import { Fingerprint, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoginLoadingOverlay } from "@/components/ui/brand-spinner";
 import { prefetchAllAppData } from "@/lib/queries/fetch-page-data";
-import { isPasskeyLoginAvailable, loginWithPasskey } from "@/lib/passkey-client";
+import { canUsePasskeyLogin, loginWithPasskey } from "@/lib/passkey-client";
 import "@/lib/queries/fetch-page-data";
 
 interface LoginBiometriaProps {
   redirectTo: string;
   disabled?: boolean;
+  onDisponivelChange?: (disponivel: boolean) => void;
 }
 
-export function LoginBiometria({ redirectTo, disabled }: LoginBiometriaProps) {
+export function LoginBiometria({
+  redirectTo,
+  disabled,
+  onDisponivelChange,
+}: LoginBiometriaProps) {
   const router = useRouter();
   const [disponivel, setDisponivel] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void isPasskeyLoginAvailable().then(setDisponivel);
-  }, []);
+    void canUsePasskeyLogin().then((ok) => {
+      setDisponivel(ok);
+      onDisponivelChange?.(ok);
+    });
+  }, [onDisponivelChange]);
 
   if (!disponivel) return null;
 
@@ -35,31 +43,31 @@ export function LoginBiometria({ redirectTo, disabled }: LoginBiometriaProps) {
     try {
       await loginWithPasskey();
       prefetchAllAppData();
-      setCarregando(false);
       router.push(destino);
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Não foi possível entrar.";
       setError(message);
+    } finally {
       setCarregando(false);
     }
   }
 
   return (
     <>
-      {carregando && <LoginLoadingOverlay />}
+      {carregando && <LoginLoadingOverlay message="Verificando senha do celular..." />}
 
       <div className="space-y-2">
         <Button
           type="button"
-          variant="outline"
-          className="w-full border-brand-red/25"
+          variant="default"
+          className="w-full"
           size="lg"
           onClick={handleLoginBiometria}
           disabled={disabled || carregando}
         >
-          <Fingerprint className="h-5 w-5 text-brand-red" />
-          Entrar com digital ou Face ID
+          <Fingerprint className="h-5 w-5" />
+          Entrar com senha do celular
         </Button>
         {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
