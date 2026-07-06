@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoginLoadingOverlay } from "@/components/ui/brand-spinner";
-import { fetchAllAppData } from "@/lib/queries/fetch-page-data";
+import { prefetchAllAppData } from "@/lib/queries/fetch-page-data";
 import { isPasskeyLoginAvailable, loginWithPasskey } from "@/lib/passkey-client";
 import "@/lib/queries/fetch-page-data";
 
@@ -33,7 +33,9 @@ export function LoginBiometria({ redirectTo, disabled }: LoginBiometriaProps) {
     const destino = redirectTo.startsWith("/") ? redirectTo : "/dashboard";
 
     try {
-      await Promise.all([loginWithPasskey(), fetchAllAppData()]);
+      await loginWithPasskey();
+      prefetchAllAppData();
+      setCarregando(false);
       router.push(destino);
       router.refresh();
     } catch (err) {

@@ -131,8 +131,8 @@ registerPagePrefetcher(PAGE_CACHE_KEYS.clientes, fetchClientes);
 registerPagePrefetcher(PAGE_CACHE_KEYS.vendas, fetchVendasPageData);
 registerPagePrefetcher(PAGE_CACHE_KEYS.financeiro, fetchFinanceiroPageData);
 
-export async function fetchAllAppData(): Promise<void> {
-  await Promise.all([
+export async function fetchAllAppData(timeoutMs = 15000): Promise<void> {
+  const loading = Promise.all([
     fetchDashboardResumo(),
     fetchDashboardParcelas(),
     fetchProdutos(),
@@ -140,6 +140,26 @@ export async function fetchAllAppData(): Promise<void> {
     fetchVendasPageData(),
     fetchFinanceiroPageData(),
   ]);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    await Promise.race([
+      loading,
+      new Promise<void>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timeout")), timeoutMs);
+      }),
+    ]);
+  } catch {
+    // Prefetch parcial ou lento — as telas carregam depois sob demanda.
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Prefetch em segundo plano — não bloqueia login nem navegação. */
+export function prefetchAllAppData(): void {
+  void fetchAllAppData().catch(() => {});
 }
 
 export function prefetchDashboardResumo() {

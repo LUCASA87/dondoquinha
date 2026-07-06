@@ -130,7 +130,7 @@ export function AppMessagesProvider({ children }: { children: ReactNode }) {
           if (!open) closeConfirm(false);
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" stackOnTop>
           <DialogHeader>
             <DialogTitle>{confirmState?.title}</DialogTitle>
             <DialogDescription className="text-base text-brand-black/70 pt-1">

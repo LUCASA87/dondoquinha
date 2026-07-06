@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { loginAction } from "@/app/actions/auth";
 import { LoginLoadingOverlay } from "@/components/ui/brand-spinner";
 import { useAppMessages } from "@/components/ui/app-messages";
-import { fetchAllAppData } from "@/lib/queries/fetch-page-data";
+import { prefetchAllAppData } from "@/lib/queries/fetch-page-data";
 import {
   isPasskeyLoginAvailable,
   registerPasskeyOnDevice,
@@ -52,12 +52,15 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
 
       if (!ativar) return;
 
+      setCarregando(true);
       await registerPasskeyOnDevice();
       toast("Login rápido ativado neste aparelho.", "success");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Não foi possível ativar o login rápido.";
       toast(message, "error");
+    } finally {
+      setCarregando(false);
     }
   }
 
@@ -70,16 +73,16 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
     const destino = redirectTo.startsWith("/") ? redirectTo : "/dashboard";
 
     try {
-      const [loginResult] = await Promise.all([
-        loginAction(formData),
-        fetchAllAppData(),
-      ]);
+      const loginResult = await loginAction(formData);
 
       if (loginResult?.error) {
         setError(loginResult.error);
         setCarregando(false);
         return;
       }
+
+      prefetchAllAppData();
+      setCarregando(false);
 
       await oferecerLoginRapido();
 
