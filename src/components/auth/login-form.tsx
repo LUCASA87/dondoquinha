@@ -41,6 +41,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
           name="username"
           autoComplete="username"
           required
+          defaultValue="dondoquinha"
           placeholder="dondoquinha"
           className="lowercase"
         />

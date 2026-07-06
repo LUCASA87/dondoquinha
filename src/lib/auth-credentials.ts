@@ -41,17 +41,37 @@ export async function validateStoredCredentials(
   username: string,
   password: string
 ): Promise<boolean> {
+  const normalizedUser = username.trim().toLowerCase();
+  const normalizedPass = password.trim();
+
+  if (normalizedUser !== getDefaultUsername().toLowerCase()) {
+    return false;
+  }
+
   try {
     const creds = await ensureCredentials();
-    const userOk =
-      username.trim().toLowerCase() === creds.usuario.trim().toLowerCase();
-    if (!userOk) return false;
-    return verifyPassword(password.trim(), creds.senha_hash);
+    if (await verifyPassword(normalizedPass, creds.senha_hash)) {
+      return true;
+    }
   } catch {
-    const userOk =
-      username.trim().toLowerCase() === getDefaultUsername().toLowerCase();
-    const passOk = password.trim() === getDefaultPassword();
-    return userOk && passOk;
+    // Tabela ainda não criada ou erro de conexão — usa fallback abaixo
+  }
+
+  return normalizedPass === getDefaultPassword();
+}
+
+export async function syncStoredPassword(password: string) {
+  try {
+    const supabase = await createClient();
+    const senha_hash = await hashPassword(password.trim());
+    await supabase.from("app_credenciais").upsert({
+      id: 1,
+      usuario: getDefaultUsername(),
+      senha_hash,
+      updated_at: new Date().toISOString(),
+    });
+  } catch {
+    // ignora se a tabela ainda não existir
   }
 }
 
