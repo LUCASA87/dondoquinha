@@ -10,22 +10,16 @@ import {
 
 /**
  * Mostra cache na hora e atualiza em segundo plano.
- * Recarrega automaticamente quando o cache da página é invalidado (após cadastros).
+ * Use `revalidate()` após cadastros para atualizar a lista na hora.
  */
 export function usePageData<T>(cacheKey: string, fetcher: () => Promise<T>) {
   const [data, setData] = useState<T | null>(() => readPageCache<T>(cacheKey));
 
-  const reload = useCallback(
-    (force = true) => {
-      return fetchWithCache(cacheKey, fetcher, { force })
-        .then((fresh) => {
-          setData(fresh);
-          return fresh;
-        })
-        .catch(() => null as T | null);
-    },
-    [cacheKey, fetcher]
-  );
+  const revalidate = useCallback(async () => {
+    const fresh = await fetchWithCache(cacheKey, fetcher, { force: true });
+    setData(fresh);
+    return fresh;
+  }, [cacheKey, fetcher]);
 
   useLayoutEffect(() => {
     let cancelled = false;
@@ -39,16 +33,16 @@ export function usePageData<T>(cacheKey: string, fetcher: () => Promise<T>) {
 
     const unsubscribe = subscribePageCache(cacheKey, () => {
       if (cancelled) return;
-      void reload(true);
+      void revalidate().catch(() => {});
     });
 
     return () => {
       cancelled = true;
       unsubscribe();
     };
-  }, [cacheKey, fetcher, reload]);
+  }, [cacheKey, fetcher, revalidate]);
 
-  return data;
+  return { data, revalidate };
 }
 
 /** Atualiza cache após mutações (create, update, delete). */

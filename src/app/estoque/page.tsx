@@ -1,11 +1,17 @@
 "use client";
 
-import { fetchProdutos } from "@/lib/queries/fetch-page-data";
-import { PAGE_CACHE_KEYS } from "@/lib/queries/page-cache";
+import { loadProdutos } from "@/lib/queries/fetch-page-data";
+import { PAGE_CACHE_KEYS, invalidateAfterEstoqueChange } from "@/lib/queries/page-cache";
 import { usePageData } from "@/hooks/use-page-data";
 import { ProdutosTable } from "@/components/estoque/produtos-table";
 
 export default function EstoquePage() {
-  const produtos = usePageData(PAGE_CACHE_KEYS.estoque, fetchProdutos);
-  return <ProdutosTable produtos={produtos ?? []} />;
+  const { data: produtos, revalidate } = usePageData(PAGE_CACHE_KEYS.estoque, loadProdutos);
+
+  async function refreshProdutos() {
+    invalidateAfterEstoqueChange();
+    await revalidate();
+  }
+
+  return <ProdutosTable produtos={produtos ?? []} onRefresh={refreshProdutos} />;
 }

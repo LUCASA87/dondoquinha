@@ -4,6 +4,10 @@ export function normalizeCPF(value: string): string {
   return value.replace(/\D/g, "").slice(0, 11);
 }
 
+export function normalizePhone(value: string): string {
+  return value.replace(/\D/g, "").slice(0, 11);
+}
+
 export function isValidCPF(value: string): boolean {
   const cpf = normalizeCPF(value);
   if (cpf.length !== 11) return false;

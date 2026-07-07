@@ -34,19 +34,21 @@ import { isValidCPF, normalizeCPF, parseClienteForm } from "@/lib/validate";
 import { mensagemWhatsAppCliente } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";
 import type { Cliente } from "@/types/database";
-import { invalidateAfterClientesChange } from "@/lib/queries/page-cache";
 import { mutationError } from "@/lib/db/helpers";
 
 interface ClientesTableProps {
   clientes: Cliente[];
+  onRefresh: () => Promise<void>;
 }
 
 function ClienteForm({
   cliente,
   onDone,
+  onRefresh,
 }: {
   cliente?: Cliente;
   onDone: () => void;
+  onRefresh: () => Promise<void>;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -71,7 +73,7 @@ function ClienteForm({
       if (err) {
         setError(err);
       } else {
-        invalidateAfterClientesChange();
+        await onRefresh();
         onDone();
       }
     });
@@ -132,7 +134,7 @@ function ClienteForm({
   );
 }
 
-export function ClientesTable({ clientes }: ClientesTableProps) {
+export function ClientesTable({ clientes, onRefresh }: ClientesTableProps) {
   const { confirm, toast } = useAppMessages();
   const [open, setOpen] = useState(false);
   const [editCliente, setEditCliente] = useState<Cliente | null>(null);
@@ -165,7 +167,7 @@ export function ClientesTable({ clientes }: ClientesTableProps) {
       if (err) {
         toast(err, "error");
       } else {
-        invalidateAfterClientesChange();
+        await onRefresh();
         toast("Cliente excluída com sucesso.", "success");
       }
     });
@@ -192,6 +194,7 @@ export function ClientesTable({ clientes }: ClientesTableProps) {
               </DialogHeader>
               <ClienteForm
                 cliente={editCliente ?? undefined}
+                onRefresh={onRefresh}
                 onDone={() => {
                   setOpen(false);
                   setEditCliente(null);

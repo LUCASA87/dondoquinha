@@ -6,7 +6,7 @@ import { usePageData } from "@/hooks/use-page-data";
 import { FinanceiroModule } from "@/components/financeiro/financeiro-module";
 
 export default function FinanceiroPage() {
-  const data = usePageData(PAGE_CACHE_KEYS.financeiro, fetchFinanceiroPageData);
+  const { data } = usePageData(PAGE_CACHE_KEYS.financeiro, fetchFinanceiroPageData);
 
   return (
     <FinanceiroModule

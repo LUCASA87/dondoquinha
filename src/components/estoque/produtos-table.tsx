@@ -28,19 +28,21 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatItemNome } from "@/lib/format";
 import { validateProdutoNome } from "@/lib/validate";
 import type { Produto } from "@/types/database";
-import { invalidateAfterEstoqueChange } from "@/lib/queries/page-cache";
 import { mutationError } from "@/lib/db/helpers";
 
 interface ProdutosTableProps {
   produtos: Produto[];
+  onRefresh: () => Promise<void>;
 }
 
 function ProdutoForm({
   produto,
   onDone,
+  onRefresh,
 }: {
   produto?: Produto;
   onDone: () => void;
+  onRefresh: () => Promise<void>;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [precoCusto, setPrecoCusto] = useState(Number(produto?.preco_custo ?? 0));
@@ -76,7 +78,7 @@ function ProdutoForm({
       if (err) {
         setError(err);
       } else {
-        invalidateAfterEstoqueChange();
+        await onRefresh();
         onDone();
       }
     });
@@ -143,7 +145,7 @@ function ProdutoForm({
   );
 }
 
-export function ProdutosTable({ produtos }: ProdutosTableProps) {
+export function ProdutosTable({ produtos, onRefresh }: ProdutosTableProps) {
   const { confirm, toast } = useAppMessages();
   const [open, setOpen] = useState(false);
   const [editProduto, setEditProduto] = useState<Produto | null>(null);
@@ -163,7 +165,7 @@ export function ProdutosTable({ produtos }: ProdutosTableProps) {
       if (err) {
         toast(err, "error");
       } else {
-        invalidateAfterEstoqueChange();
+        await onRefresh();
         toast("Produto excluído com sucesso.", "success");
       }
     });
@@ -191,6 +193,7 @@ export function ProdutosTable({ produtos }: ProdutosTableProps) {
               <ProdutoForm
                 key={editProduto?.id ?? "novo"}
                 produto={editProduto ?? undefined}
+                onRefresh={onRefresh}
                 onDone={() => {
                   setOpen(false);
                   setEditProduto(null);

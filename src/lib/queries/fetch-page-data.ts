@@ -90,8 +90,8 @@ export async function fetchVendasPageData() {
     await ensureSupabaseConfig();
     const supabase = createClient();
     const [clientes, produtos, vendas] = await Promise.all([
-      fetchClientes(),
-      fetchProdutos(),
+      loadClientes(),
+      loadProdutos(),
       queryVendas(supabase),
     ]);
     return { clientes, produtos, vendas };
@@ -115,18 +115,22 @@ export async function fetchFinanceiroPageData() {
   });
 }
 
+export async function loadProdutos() {
+  await ensureSupabaseConfig();
+  return queryProdutos(createClient());
+}
+
+export async function loadClientes() {
+  await ensureSupabaseConfig();
+  return queryClientes(createClient());
+}
+
 export async function fetchProdutos() {
-  return fetchWithCache(PAGE_CACHE_KEYS.estoque, async () => {
-    await ensureSupabaseConfig();
-    return queryProdutos(createClient());
-  });
+  return fetchWithCache(PAGE_CACHE_KEYS.estoque, loadProdutos);
 }
 
 export async function fetchClientes() {
-  return fetchWithCache(PAGE_CACHE_KEYS.clientes, async () => {
-    await ensureSupabaseConfig();
-    return queryClientes(createClient());
-  });
+  return fetchWithCache(PAGE_CACHE_KEYS.clientes, loadClientes);
 }
 
 registerPagePrefetcher(PAGE_CACHE_KEYS.dashboard, fetchDashboardPageData);

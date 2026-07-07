@@ -21,8 +21,8 @@ export function mapDbError(err: unknown): { error: string } {
   return { error: formatSupabaseError(message) };
 }
 
-export function dbError(message: string): { error: string } {
-  return { error: formatSupabaseError(message) };
+export function dbError(message: string, code?: string): { error: string } {
+  return { error: formatSupabaseError(message, code) };
 }
 
 export async function safeDb<T>(fn: (supabase: SupabaseClient) => Promise<T>): Promise<T | { error: string }> {

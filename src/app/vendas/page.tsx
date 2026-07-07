@@ -6,7 +6,7 @@ import { usePageData } from "@/hooks/use-page-data";
 import { VendasModule } from "@/components/vendas/vendas-module";
 
 export default function VendasPage() {
-  const data = usePageData(PAGE_CACHE_KEYS.vendas, fetchVendasPageData);
+  const { data } = usePageData(PAGE_CACHE_KEYS.vendas, fetchVendasPageData);
 
   return (
     <VendasModule

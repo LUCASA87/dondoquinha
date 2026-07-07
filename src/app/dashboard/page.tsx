@@ -19,8 +19,8 @@ const RESUMO_VAZIO: DashboardStats = {
 };
 
 export default function DashboardPage() {
-  const resumo = usePageData(PAGE_CACHE_KEYS.dashboardResumo, fetchDashboardResumo);
-  const parcelas = usePageData(PAGE_CACHE_KEYS.dashboardParcelas, fetchDashboardParcelas);
+  const { data: resumo } = usePageData(PAGE_CACHE_KEYS.dashboardResumo, fetchDashboardResumo);
+  const { data: parcelas } = usePageData(PAGE_CACHE_KEYS.dashboardParcelas, fetchDashboardParcelas);
 
   return (
     <div className="space-y-4">

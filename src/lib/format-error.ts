@@ -14,6 +14,33 @@ export function formatConnectionError(message: string): string {
   return message;
 }
 
-export function formatSupabaseError(message: string): string {
+function formatDuplicateError(message: string): string | null {
+  const lower = message.toLowerCase();
+  const isDuplicate =
+    lower.includes("duplicate key") ||
+    lower.includes("unique constraint") ||
+    lower.includes("23505");
+
+  if (!isDuplicate) return null;
+
+  if (lower.includes("cpf")) {
+    return "Este CPF já está cadastrado.";
+  }
+  if (lower.includes("telefone") || lower.includes("phone")) {
+    return "Este telefone já está cadastrado.";
+  }
+  return "Já existe um cadastro com esses dados.";
+}
+
+export function formatSupabaseError(message: string, code?: string): string {
+  if (code === "23505") {
+    const duplicate = formatDuplicateError(message);
+    if (duplicate) return duplicate;
+    return "Já existe um cadastro com esses dados.";
+  }
+
+  const duplicate = formatDuplicateError(message);
+  if (duplicate) return duplicate;
+
   return formatConnectionError(message);
 }
