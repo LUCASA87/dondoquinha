@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient, ensureSupabaseConfig } from "@/lib/supabase/client";
 import {
   PAGE_CACHE_KEYS,
   fetchWithCache,
@@ -57,6 +57,7 @@ async function queryDashboardResumoFallback(supabase: ReturnType<typeof createCl
 /** Cards do dashboard — consulta única via RPC quando disponível. */
 export async function fetchDashboardResumo() {
   return fetchWithCache(PAGE_CACHE_KEYS.dashboardResumo, async () => {
+    await ensureSupabaseConfig();
     const supabase = createClient();
     const rpc = await queryDashboardResumoRpc(supabase);
     if (rpc) return rpc;
@@ -65,11 +66,12 @@ export async function fetchDashboardResumo() {
 }
 
 export async function fetchDashboardParcelas() {
-  return fetchWithCache(PAGE_CACHE_KEYS.dashboardParcelas, () =>
-    queryParcelasAVencer(createClient(), 30, {
+  return fetchWithCache(PAGE_CACHE_KEYS.dashboardParcelas, async () => {
+    await ensureSupabaseConfig();
+    return queryParcelasAVencer(createClient(), 30, {
       buscarProdutos: false,
-    })
-  );
+    });
+  });
 }
 
 /** Busca dados direto no Supabase pelo navegador — com cache em memória. */
@@ -85,6 +87,7 @@ export async function fetchDashboardPageData() {
 
 export async function fetchVendasPageData() {
   return fetchWithCache(PAGE_CACHE_KEYS.vendas, async () => {
+    await ensureSupabaseConfig();
     const supabase = createClient();
     const [clientes, produtos, vendas] = await Promise.all([
       fetchClientes(),
@@ -97,6 +100,7 @@ export async function fetchVendasPageData() {
 
 export async function fetchFinanceiroPageData() {
   return fetchWithCache(PAGE_CACHE_KEYS.financeiro, async () => {
+    await ensureSupabaseConfig();
     const supabase = createClient();
     const [parcelas, contas] = await Promise.all([
       queryParcelasAbertas(supabase),
@@ -112,15 +116,17 @@ export async function fetchFinanceiroPageData() {
 }
 
 export async function fetchProdutos() {
-  return fetchWithCache(PAGE_CACHE_KEYS.estoque, () =>
-    queryProdutos(createClient())
-  );
+  return fetchWithCache(PAGE_CACHE_KEYS.estoque, async () => {
+    await ensureSupabaseConfig();
+    return queryProdutos(createClient());
+  });
 }
 
 export async function fetchClientes() {
-  return fetchWithCache(PAGE_CACHE_KEYS.clientes, () =>
-    queryClientes(createClient())
-  );
+  return fetchWithCache(PAGE_CACHE_KEYS.clientes, async () => {
+    await ensureSupabaseConfig();
+    return queryClientes(createClient());
+  });
 }
 
 registerPagePrefetcher(PAGE_CACHE_KEYS.dashboard, fetchDashboardPageData);

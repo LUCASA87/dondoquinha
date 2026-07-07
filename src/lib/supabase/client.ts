@@ -9,6 +9,7 @@ declare global {
 let client: SupabaseClient | null = null;
 let runtimeUrl: string | null = null;
 let runtimeKey: string | null = null;
+let configPromise: Promise<void> | null = null;
 
 export function initSupabaseConfig(url: string, key: string): void {
   const nextUrl = url.trim();
@@ -22,7 +23,10 @@ export function initSupabaseConfig(url: string, key: string): void {
 
 function readConfig(): { url: string; key: string } {
   if (typeof window !== "undefined" && window.__DQ_SUPABASE__) {
-    return window.__DQ_SUPABASE__;
+    const { url, key } = window.__DQ_SUPABASE__;
+    if (url?.trim() && key?.trim()) {
+      return { url: url.trim(), key: key.trim() };
+    }
   }
 
   return {
@@ -39,10 +43,37 @@ export function getSupabaseConfigStatus():
     return {
       ok: false,
       message:
-        "Supabase não configurado no servidor. Na Vercel, adicione NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY e faça redeploy.",
+        "Supabase não configurado. Na Vercel, confira NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY e faça redeploy.",
     };
   }
   return { ok: true, url, key };
+}
+
+async function loadConfigFromApi(): Promise<void> {
+  const response = await fetch("/api/runtime-config", { cache: "no-store" });
+  const data = (await response.json()) as { url?: string; key?: string; error?: string };
+
+  if (!response.ok || !data.url || !data.key) {
+    throw new Error(data.error ?? "Não foi possível carregar a configuração do Supabase.");
+  }
+
+  initSupabaseConfig(data.url, data.key);
+}
+
+export async function ensureSupabaseConfig(): Promise<void> {
+  const status = getSupabaseConfigStatus();
+  if (status.ok) return;
+
+  if (typeof window === "undefined") return;
+
+  if (!configPromise) {
+    configPromise = loadConfigFromApi().catch((err) => {
+      configPromise = null;
+      throw err;
+    });
+  }
+
+  await configPromise;
 }
 
 export function createClient(): SupabaseClient {
@@ -58,4 +89,9 @@ export function createClient(): SupabaseClient {
   }
 
   return client;
+}
+
+export async function getSupabaseClient(): Promise<SupabaseClient> {
+  await ensureSupabaseConfig();
+  return createClient();
 }

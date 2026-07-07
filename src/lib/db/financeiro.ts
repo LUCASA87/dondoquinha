@@ -25,7 +25,7 @@ export async function registrarPagamentoCrediario(data: {
   valor_pago: number;
   obs?: string;
 }) {
-  const supabase = db();
+  const supabase = await db();
   const valorPago = Math.round(data.valor_pago * 100) / 100;
 
   if (valorPago < 0.01) {
@@ -159,7 +159,7 @@ export async function registrarPagamentoCrediario(data: {
 export async function getParcelasAbertas(): Promise<
   (ParcelaVenda & { saldo_parcela: number })[]
 > {
-  const supabase = db();
+  const supabase = await db();
 
   const { data, error } = await supabase
     .from("parcelas_vendas")
@@ -183,7 +183,7 @@ export async function getParcelasAbertas(): Promise<
 }
 
 export async function excluirParcelaCrediario(parcelaId: string) {
-  const supabase = db();
+  const supabase = await db();
 
   const { data: parcela, error: parcelaError } = await supabase
     .from("parcelas_vendas")
@@ -239,7 +239,7 @@ export async function getParcelasAVencer(
   const buscarProdutos = opcoes?.buscarProdutos ?? true;
   const limiteProdutos = opcoes?.limiteProdutos ?? 0;
 
-  const supabase = db();
+  const supabase = await db();
   const hoje = new Date();
   hoje.setHours(12, 0, 0, 0);
   const limite = new Date(hoje);
@@ -315,7 +315,7 @@ export async function getParcelasAVencer(
 }
 
 export async function getDebitoCliente(clienteId: string): Promise<ClienteDebitoResumo | null> {
-  const supabase = db();
+  const supabase = await db();
 
   const { data: cliente } = await supabase
     .from("clientes")
@@ -405,7 +405,7 @@ export async function getDebitoCliente(clienteId: string): Promise<ClienteDebito
 }
 
 export async function buscarClientesComSaldo(termo: string) {
-  const supabase = db();
+  const supabase = await db();
 
   let query = supabase
     .from("clientes")
@@ -467,7 +467,7 @@ export async function buscarClientesComSaldo(termo: string) {
 }
 
 export async function getTotalAReceber() {
-  const supabase = db();
+  const supabase = await db();
 
   const { data, error } = await supabase
     .from("parcelas_vendas")
@@ -483,7 +483,7 @@ export async function getTotalAReceber() {
 }
 
 export async function createContaAPagar(formData: FormData) {
-  const supabase = db();
+  const supabase = await db();
 
   const descricao = (formData.get("descricao") as string)?.trim();
   const valorTotal = Number(formData.get("valor"));
@@ -531,7 +531,7 @@ export async function createContaAPagar(formData: FormData) {
 }
 
 export async function darBaixaConta(id: string) {
-  const supabase = db();
+  const supabase = await db();
   const hoje = new Date().toISOString().split("T")[0];
 
   const { error } = await supabase
@@ -545,7 +545,7 @@ export async function darBaixaConta(id: string) {
 }
 
 export async function getContasAPagar() {
-  const supabase = db();
+  const supabase = await db();
   const { data, error } = await supabase
     .from("contas_a_pagar")
     .select("*")
@@ -585,7 +585,7 @@ export type ResultadoRelatorioContas =
 export async function getContasPagasRelatorio(
   periodo: PeriodoRelatorioContas
 ): Promise<ResultadoRelatorioContas> {
-  const supabase = db();
+  const supabase = await db();
 
   const { data, error } = await supabase
     .from("contas_a_pagar")
@@ -654,7 +654,7 @@ export async function getRecebimentosCrediario(
     return { error: "A data inicial não pode ser depois da data final." };
   }
 
-  const supabase = db();
+  const supabase = await db();
 
   const { data, error } = await supabase
     .from("pagamentos_crediario")
@@ -692,7 +692,7 @@ export async function getRelatorioClienteCompras(
   clienteId: string,
   filtro: FiltroParcelasClientePDF
 ): Promise<ResultadoRelatorioClienteCompras> {
-  const supabase = db();
+  const supabase = await db();
 
   const { data: cliente } = await supabase
     .from("clientes")
@@ -773,7 +773,7 @@ export async function getRelatorioClienteCompras(
 }
 
 export async function getTotalBoletosMesAtual() {
-  const supabase = db();
+  const supabase = await db();
   const hoje = new Date();
   const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
     .toISOString()
@@ -794,7 +794,7 @@ export async function getTotalBoletosMesAtual() {
 }
 
 export async function createCartao(formData: FormData) {
-  const supabase = db();
+  const supabase = await db();
 
   const nome = (formData.get("nome_cartao") as string)?.trim();
   const dia = Number(formData.get("dia_vencimento"));
@@ -826,7 +826,7 @@ export async function createCartao(formData: FormData) {
 }
 
 export async function deleteCartao(id: string) {
-  const supabase = db();
+  const supabase = await db();
 
   const { error } = await supabase.from("cartoes_credito").delete().eq("id", id);
 
@@ -836,7 +836,7 @@ export async function deleteCartao(id: string) {
 }
 
 export async function getCartoes() {
-  const supabase = db();
+  const supabase = await db();
   const { data, error } = await supabase
     .from("cartoes_credito")
     .select("*")
@@ -853,7 +853,7 @@ export async function createFaturaCartao(data: {
   parcelas_totais: number;
   data_compra: string;
 }) {
-  const supabase = db();
+  const supabase = await db();
 
   const { data: cartao } = await supabase
     .from("cartoes_credito")
@@ -888,7 +888,7 @@ export async function createFaturaCartao(data: {
 }
 
 export async function getFaturasCartao() {
-  const supabase = db();
+  const supabase = await db();
   const { data, error } = await supabase
     .from("faturas_cartao")
     .select("*, cartoes_credito(nome_cartao, dia_vencimento)")
@@ -899,7 +899,7 @@ export async function getFaturasCartao() {
 }
 
 export async function getResumoFaturasCartao() {
-  const supabase = db();
+  const supabase = await db();
   const hoje = new Date();
   const mesAtual = hoje.getMonth();
   const anoAtual = hoje.getFullYear();
@@ -930,7 +930,7 @@ export async function getResumoFaturasCartao() {
 }
 
 export async function darBaixaFatura(id: string) {
-  const supabase = db();
+  const supabase = await db();
 
   const { error } = await supabase
     .from("faturas_cartao")

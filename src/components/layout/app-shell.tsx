@@ -7,7 +7,7 @@ import { AppMessagesProvider } from "@/components/ui/app-messages";
 import { InstallAppNotification } from "@/components/pwa/install-app-notification";
 import { NavigationProvider } from "./navigation-context";
 import { prefetchAllPages, prefetchDashboardFirst } from "@/lib/queries/page-cache";
-import { createClient } from "@/lib/supabase/client";
+import { ensureSupabaseConfig, getSupabaseClient } from "@/lib/supabase/client";
 import "@/lib/queries/fetch-page-data";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -24,11 +24,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const rotas = ["/dashboard", "/estoque", "/clientes", "/vendas", "/financeiro"];
     rotas.forEach((href) => router.prefetch(href));
 
-    void createClient()
-      .from("produtos")
-      .select("id")
-      .limit(1)
-      .then(() => {});
+    void ensureSupabaseConfig()
+      .then(() => getSupabaseClient())
+      .then((client) =>
+        client
+          .from("produtos")
+          .select("id")
+          .limit(1)
+          .then(() => {})
+      );
   }, [router, isLogin]);
 
   if (isLogin) {
