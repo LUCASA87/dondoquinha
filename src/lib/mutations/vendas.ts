@@ -1,5 +1,6 @@
 import { montarComprovanteVenda } from "@/lib/comprovante-venda-data";
 import { runDb, mapDbError, dbError } from "@/lib/db/helpers";
+import { baixarEstoqueVenda, validarEstoqueVenda } from "@/lib/db/estoque-venda";
 import { formatItemNome } from "@/lib/format";
 import { invalidateAfterVendasChange } from "@/lib/queries/page-cache";
 import type { ComprovanteVendaData } from "@/lib/store";
@@ -20,6 +21,9 @@ export async function createVenda(data: {
 }) {
   try {
     const result = await runDb(async (supabase) => {
+    const estoqueOk = await validarEstoqueVenda(supabase, data.itens);
+    if ("error" in estoqueOk) return estoqueOk;
+
     const valor_total = data.itens.reduce(
       (sum, item) => sum + item.quantidade * item.preco_unitario,
       0
@@ -65,38 +69,10 @@ export async function createVenda(data: {
     }));
 
     const { error: itensError } = await supabase.from("venda_itens").insert(itensInsert);
-    if (itensError) return dbError(itensError.message);
+    if (itensError) return dbError(itensError.message, itensError.code);
 
-    const produtoIds = [
-      ...new Set(data.itens.map((i) => i.produto_id).filter(Boolean) as string[]),
-    ];
-
-    if (produtoIds.length > 0) {
-      const { data: produtos } = await supabase
-        .from("produtos")
-        .select("id, quantidade")
-        .in("id", produtoIds);
-
-      const qtdPorProduto = new Map<string, number>();
-      for (const item of data.itens) {
-        if (!item.produto_id) continue;
-        qtdPorProduto.set(
-          item.produto_id,
-          (qtdPorProduto.get(item.produto_id) ?? 0) + item.quantidade
-        );
-      }
-
-      await Promise.all(
-        (produtos ?? []).map((produto) => {
-          const baixar = qtdPorProduto.get(produto.id) ?? 0;
-          if (baixar < 1) return Promise.resolve();
-          return supabase
-            .from("produtos")
-            .update({ quantidade: produto.quantidade - baixar })
-            .eq("id", produto.id);
-        })
-      );
-    }
+    const baixa = await baixarEstoqueVenda(supabase, data.itens);
+    if ("error" in baixa) return baixa;
 
     const valorParcela = Math.round((valor_total / parcelas) * 100) / 100;
     const parcelasComprovante: ComprovanteVendaData["parcelas"] = [];

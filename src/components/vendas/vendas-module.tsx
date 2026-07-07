@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { Plus, Minus, ShoppingBag } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,6 @@ import { ComprovanteVenda } from "@/components/vendas/comprovante-venda";
 import { SelecaoBotoes, OPCOES_PARCELAS } from "@/components/ui/selecao-botoes";
 import { InputMoeda } from "@/components/ui/input-moeda";
 import { createVenda } from "@/lib/mutations/vendas";
-import { invalidateAfterVendasChange } from "@/lib/queries/page-cache";
 import { mutationError } from "@/lib/db/helpers";
 import { formatCurrency, formatDate, formatItemNome, formatItemNomeInput } from "@/lib/format";
 import { validateProdutoNome } from "@/lib/validate";
@@ -39,6 +38,7 @@ interface VendasModuleProps {
   clientes: Cliente[];
   produtos: Produto[];
   vendas: Venda[];
+  onRefresh: () => Promise<void>;
 }
 
 interface CarrinhoItem {
@@ -52,7 +52,20 @@ interface CarrinhoItem {
   manual: boolean;
 }
 
-export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) {
+function labelProdutoLista(p: Produto) {
+  const nome = formatItemNome(p.nome);
+  const preco = formatCurrency(Number(p.preco_venda));
+  if (p.quantidade < 1) {
+    return `${nome} — ${preco} (esgotado)`;
+  }
+  return `${nome} — ${preco} (est.: ${p.quantidade})`;
+}
+
+function labelProdutoSelecionado(p: Produto) {
+  return `${formatItemNome(p.nome)} · ${formatCurrency(Number(p.preco_venda))}`;
+}
+
+export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasModuleProps) {
   const [clienteId, setClienteId] = useState("");
   const [parcelas, setParcelas] = useState(1);
   const [obs, setObs] = useState("");
@@ -67,13 +80,27 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
   const [telefoneComprovante, setTelefoneComprovante] = useState<string | null>(null);
   const [showComprovante, setShowComprovante] = useState(false);
   const [pending, startTransition] = useTransition();
+  const carrinhoRef = useRef<HTMLDivElement>(null);
+  const scrollAposAdicionar = useRef(false);
 
-  const produtosOrdenados = [...produtos].sort((a, b) => {
+  const produtoAtual = produtos.find((p) => p.id === produtoSelecionado);
+
+  const produtosOrdenados = [...produtos]
+    .filter((p) => p.quantidade > 0)
+    .sort((a, b) => {
     const aEsgotado = a.quantidade < 1;
     const bEsgotado = b.quantidade < 1;
     if (aEsgotado !== bEsgotado) return aEsgotado ? 1 : -1;
     return formatItemNome(a.nome).localeCompare(formatItemNome(b.nome), "pt-BR");
   });
+
+  useEffect(() => {
+    if (!scrollAposAdicionar.current || carrinho.length === 0) return;
+    scrollAposAdicionar.current = false;
+    requestAnimationFrame(() => {
+      carrinhoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [carrinho]);
 
   useEffect(() => {
     if (produtoSelecionado) {
@@ -84,20 +111,19 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
     }
   }, [produtos, produtoSelecionado]);
 
-  const total = carrinho.reduce(
-    (sum, item) => sum + item.quantidade * item.preco_unitario,
-    0
-  );
+  function marcarScrollAposAdicionar() {
+    scrollAposAdicionar.current = true;
+  }
 
-  function adicionarProduto() {
-    const produto = produtos.find((p) => p.id === produtoSelecionado);
-    if (!produto) return;
+  function adicionarProdutoAoCarrinho(produtoId: string): boolean {
+    const produto = produtos.find((p) => p.id === produtoId);
+    if (!produto) return false;
 
     const existente = carrinho.find((c) => c.produto_id === produto.id);
     if (existente) {
       if (existente.quantidade >= produto.quantidade) {
         setError("Quantidade maior que o estoque disponível.");
-        return;
+        return false;
       }
       setCarrinho(
         carrinho.map((c) =>
@@ -109,7 +135,7 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
     } else {
       if (produto.quantidade < 1) {
         setError("Produto sem estoque.");
-        return;
+        return false;
       }
       setCarrinho([
         ...carrinho,
@@ -126,6 +152,21 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
       ]);
     }
     setError(null);
+    return true;
+  }
+
+  function handleProdutoSelect(produtoId: string) {
+    setProdutoSelecionado(produtoId);
+    if (adicionarProdutoAoCarrinho(produtoId)) {
+      marcarScrollAposAdicionar();
+    }
+  }
+
+  function adicionarProduto() {
+    if (!produtoSelecionado) return;
+    if (adicionarProdutoAoCarrinho(produtoSelecionado)) {
+      marcarScrollAposAdicionar();
+    }
   }
 
   function adicionarManual() {
@@ -172,7 +213,13 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
     setPrecoManual(0);
     setQtdManual("1");
     setError(null);
+    marcarScrollAposAdicionar();
   }
+
+  const total = carrinho.reduce(
+    (sum, item) => sum + item.quantidade * item.preco_unitario,
+    0
+  );
 
   function alterarQuantidade(itemId: string, delta: number) {
     const novoCarrinho = carrinho
@@ -218,7 +265,7 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
       if (err) {
         setError(err);
       } else if ("comprovante" in result && result.comprovante) {
-        invalidateAfterVendasChange();
+        await onRefresh();
         const telefone =
           clientes.find((c) => c.id === clienteId)?.telefone ?? null;
         setTelefoneComprovante(telefone);
@@ -277,34 +324,47 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
             </Select>
           </div>
 
-          <div className="flex gap-3">
-            <Select value={produtoSelecionado} onValueChange={setProdutoSelecionado}>
-              <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Selecione um produto" />
-              </SelectTrigger>
-              <SelectContent>
-                {produtosOrdenados.length === 0 ? (
-                  <SelectItem value="__vazio" disabled>
-                    Nenhum produto cadastrado no Estoque
-                  </SelectItem>
-                ) : (
-                  produtosOrdenados.map((p) => {
-                    const esgotado = p.quantidade < 1;
-                    return (
-                      <SelectItem key={p.id} value={p.id} disabled={esgotado}>
-                        {formatItemNome(p.nome)} — {formatCurrency(Number(p.preco_venda))}
-                        {esgotado ? " (esgotado — repor no Estoque)" : ` (estoque: ${p.quantidade})`}
-                      </SelectItem>
-                    );
-                  })
-                )}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+            <div className="min-w-0 w-full sm:flex-1">
+              <Select value={produtoSelecionado} onValueChange={handleProdutoSelect}>
+                <SelectTrigger className="h-11 w-full min-w-0 gap-2 overflow-hidden [&_svg]:shrink-0">
+                  {produtoAtual ? (
+                    <span className="min-w-0 flex-1 truncate text-left">
+                      {labelProdutoSelecionado(produtoAtual)}
+                    </span>
+                  ) : (
+                    <SelectValue placeholder="Selecione um produto" className="truncate" />
+                  )}
+                </SelectTrigger>
+                <SelectContent className="max-w-[min(100vw-2rem,24rem)]">
+                  {produtosOrdenados.length === 0 ? (
+                    <SelectItem value="__vazio" disabled>
+                      Nenhum produto cadastrado no Estoque
+                    </SelectItem>
+                  ) : (
+                    produtosOrdenados.map((p) => {
+                      const esgotado = p.quantidade < 1;
+                      return (
+                        <SelectItem
+                          key={p.id}
+                          value={p.id}
+                          disabled={esgotado}
+                          className="whitespace-normal"
+                        >
+                          {labelProdutoLista(p)}
+                        </SelectItem>
+                      );
+                    })
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
             <Button
               type="button"
               onClick={adicionarProduto}
               variant="secondary"
               disabled={!produtoSelecionado}
+              className="w-full shrink-0 sm:w-auto"
             >
               <Plus className="h-4 w-4" />
               Adicionar
@@ -363,7 +423,7 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
           </div>
 
           {carrinho.length > 0 && (
-            <>
+            <div ref={carrinhoRef} className="scroll-mt-4 space-y-4">
               <div className="rounded-xl border border-brand-red/10 p-4 space-y-3">
                 {carrinho.map((item) => (
                   <div
@@ -435,7 +495,7 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
                   rows={2}
                 />
               </div>
-            </>
+            </div>
           )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
