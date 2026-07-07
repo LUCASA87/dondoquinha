@@ -43,6 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { baixarRelatorioClienteComprasPDF } from "@/lib/relatorio-cliente-compras-pdf";
 import { filtrarParcelasPagaveis } from "@/lib/parcelas-utils";
+import { mutationError } from "@/lib/db/helpers";
 import { SelecaoParcelaDebito } from "@/components/ui/selecao-botoes";
 import type { ClienteDebitoResumo, ParcelaDebito } from "@/types/database";
 import type { ComprovantePagamentoData } from "@/lib/store";
@@ -175,12 +176,13 @@ export function ClienteDebitoPanel({
         obs: obs.trim() || undefined,
       });
 
-      if (result.error) {
-        setError(result.error);
+      const err = mutationError(result);
+      if (err) {
+        setError(err);
         return;
       }
 
-      if (result.comprovante) {
+      if ("comprovante" in result && result.comprovante) {
         setComprovante(result.comprovante);
         setShowComprovante(true);
       }

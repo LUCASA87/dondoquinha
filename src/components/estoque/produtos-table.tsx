@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatItemNome } from "@/lib/format";
 import type { Produto } from "@/types/database";
 import { invalidateAfterEstoqueChange } from "@/lib/queries/page-cache";
+import { mutationError } from "@/lib/db/helpers";
 
 interface ProdutosTableProps {
   produtos: Produto[];
@@ -63,8 +64,9 @@ function ProdutoForm({
         ? await updateProduto(produto.id, formData)
         : await createProduto(formData);
 
-      if (result.error) {
-        setError(result.error);
+      const err = mutationError(result);
+      if (err) {
+        setError(err);
       } else {
         invalidateAfterEstoqueChange();
         onDone();
@@ -149,8 +151,9 @@ export function ProdutosTable({ produtos }: ProdutosTableProps) {
     if (!ok) return;
     startTransition(async () => {
       const result = await deleteProduto(id);
-      if (result.error) {
-        toast(result.error, "error");
+      const err = mutationError(result);
+      if (err) {
+        toast(err, "error");
       } else {
         invalidateAfterEstoqueChange();
         toast("Produto excluído com sucesso.", "success");

@@ -1,5 +1,5 @@
 import type { LinhaRelatorioConta } from "@/lib/relatorio-contas-pagar-pdf";
-import { db } from "@/lib/db/helpers";
+import { db, mapDbError, dbError } from "@/lib/db/helpers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ComprovantePagamentoData } from "@/lib/store";
 import type { ClienteDebitoResumo, StatusPagamento, ParcelaAVencer, ParcelaVenda } from "@/types/database";
@@ -107,7 +107,7 @@ export async function registrarPagamentoCrediario(data: {
       data_pagamento: dataPagamento,
     });
 
-    if (pagamentoError) return { error: pagamentoError.message };
+    if (pagamentoError) return dbError(pagamentoError.message);
 
     const { error: updateError } = await supabase
       .from("parcelas_vendas")
@@ -117,7 +117,7 @@ export async function registrarPagamentoCrediario(data: {
       })
       .eq("id", p.id);
 
-    if (updateError) return { error: updateError.message };
+    if (updateError) return dbError(updateError.message);
 
     if (p.numero_parcela === parcelaInicialNumero) {
       saldoParcelaRestante = Math.max(0, Number(p.valor_parcela) - novoValorPago);
@@ -204,7 +204,7 @@ export async function excluirParcelaCrediario(parcelaId: string) {
     .delete()
     .eq("id", parcelaId);
 
-  if (deleteError) return { error: deleteError.message };
+  if (deleteError) return dbError(deleteError.message);
 
   const { data: restantes } = await supabase
     .from("parcelas_vendas")
@@ -525,7 +525,7 @@ export async function createContaAPagar(formData: FormData) {
     .insert(registros)
     .select();
 
-  if (error) return { error: error.message };
+  if (error) return dbError(error.message);
 
   return { success: true, contas: inseridas ?? [] };
 }
@@ -539,7 +539,7 @@ export async function darBaixaConta(id: string) {
     .update({ status: "pago", data_pagamento: hoje })
     .eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) return dbError(error.message);
 
   return { success: true };
 }
@@ -593,7 +593,7 @@ export async function getContasPagasRelatorio(
     .eq("status", "pago")
     .order("data_pagamento", { ascending: false });
 
-  if (error) return { error: error.message };
+  if (error) return dbError(error.message);
 
   const hoje = new Date();
   hoje.setHours(12, 0, 0, 0);
@@ -663,7 +663,7 @@ export async function getRecebimentosCrediario(
     .lte("data_pagamento", dataFim)
     .order("data_pagamento", { ascending: false });
 
-  if (error) return { error: error.message };
+  if (error) return dbError(error.message);
 
   const linhas = (data ?? []).map((p) => {
     const venda = p.vendas as unknown as { clientes: { nome: string } | null } | null;
@@ -820,7 +820,7 @@ export async function createCartao(formData: FormData) {
     .select()
     .single();
 
-  if (error) return { error: error.message };
+  if (error) return dbError(error.message);
 
   return { success: true, cartao: data };
 }
@@ -830,7 +830,7 @@ export async function deleteCartao(id: string) {
 
   const { error } = await supabase.from("cartoes_credito").delete().eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) return dbError(error.message);
 
   return { success: true };
 }
@@ -937,7 +937,7 @@ export async function darBaixaFatura(id: string) {
     .update({ status: "pago" })
     .eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) return dbError(error.message);
 
   return { success: true };
 }

@@ -30,6 +30,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { filtrarParcelasPagaveis } from "@/lib/parcelas-utils";
 import { invalidateAfterFinanceiroChange } from "@/lib/queries/page-cache";
+import { mutationError } from "@/lib/db/helpers";
 import type { ParcelaVenda } from "@/types/database";
 import type { ComprovantePagamentoData } from "@/lib/store";
 
@@ -117,12 +118,13 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
         obs: obs.trim() || undefined,
       });
 
-      if (result.error) {
-        setError(result.error);
+      const err = mutationError(result);
+      if (err) {
+        setError(err);
         return;
       }
 
-      if (result.comprovante) {
+      if ("comprovante" in result && result.comprovante) {
         setComprovante(result.comprovante);
         setShowComprovante(true);
       }
@@ -162,8 +164,9 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
 
     startTransition(async () => {
       const result = await excluirParcelaCrediario(p.id);
-      if (result.error) {
-        toast(result.error, "error");
+      const err = mutationError(result);
+      if (err) {
+        toast(err, "error");
         return;
       }
       toast("Parcela excluída.", "success");

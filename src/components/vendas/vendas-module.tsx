@@ -29,6 +29,7 @@ import { SelecaoBotoes, OPCOES_PARCELAS } from "@/components/ui/selecao-botoes";
 import { InputMoeda } from "@/components/ui/input-moeda";
 import { createVenda } from "@/lib/mutations/vendas";
 import { invalidateAfterVendasChange } from "@/lib/queries/page-cache";
+import { mutationError } from "@/lib/db/helpers";
 import { formatCurrency, formatDate, formatItemNome, formatItemNomeInput } from "@/lib/format";
 import type { Cliente, Produto, Venda } from "@/types/database";
 import type { ComprovanteVendaData } from "@/lib/store";
@@ -211,8 +212,9 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
         })),
       });
 
-      if (result.error) {
-        setError(result.error);
+      const err = mutationError(result);
+      if (err) {
+        setError(err);
       } else if ("comprovante" in result && result.comprovante) {
         invalidateAfterVendasChange();
         const telefone =

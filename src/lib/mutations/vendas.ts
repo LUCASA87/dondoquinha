@@ -1,5 +1,5 @@
 import { montarComprovanteVenda } from "@/lib/comprovante-venda-data";
-import { runDb, mapDbError } from "@/lib/db/helpers";
+import { runDb, mapDbError, dbError } from "@/lib/db/helpers";
 import { formatItemNome } from "@/lib/format";
 import { invalidateAfterVendasChange } from "@/lib/queries/page-cache";
 import type { ComprovanteVendaData } from "@/lib/store";
@@ -42,7 +42,7 @@ export async function createVenda(data: {
       .single();
 
     if (vendaError || !venda) {
-      return { error: vendaError?.message ?? "Erro ao criar venda" };
+      return dbError(vendaError?.message ?? "Erro ao criar venda");
     }
 
     const numeroPedido = venda.id.replace(/-/g, "").slice(0, 8).toUpperCase();
@@ -65,7 +65,7 @@ export async function createVenda(data: {
     }));
 
     const { error: itensError } = await supabase.from("venda_itens").insert(itensInsert);
-    if (itensError) return { error: itensError.message };
+    if (itensError) return dbError(itensError.message);
 
     const produtoIds = [
       ...new Set(data.itens.map((i) => i.produto_id).filter(Boolean) as string[]),
@@ -177,7 +177,7 @@ export async function getUltimaVendaComprovante(
       .limit(1)
       .maybeSingle();
 
-    if (error) return { error: error.message };
+    if (error) return dbError(error.message);
     if (!venda) return { error: "Nenhuma compra encontrada para esta cliente." };
 
     const comprovante = montarComprovanteVenda({

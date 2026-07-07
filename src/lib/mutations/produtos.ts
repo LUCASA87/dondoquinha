@@ -1,4 +1,4 @@
-import { runDb, mapDbError } from "@/lib/db/helpers";
+import { runDb, mapDbError, dbError } from "@/lib/db/helpers";
 import { formatItemNome } from "@/lib/format";
 import { invalidateAfterEstoqueChange } from "@/lib/queries/page-cache";
 
@@ -31,7 +31,7 @@ export async function createProduto(formData: FormData) {
         preco_venda: Number(formData.get("preco_venda")),
       });
 
-      if (error) return { error: error.message };
+      if (error) return dbError(error.message);
       return { success: true as const };
     });
 
@@ -56,7 +56,7 @@ export async function updateProduto(id: string, formData: FormData) {
         })
         .eq("id", id);
 
-      if (error) return { error: error.message };
+      if (error) return dbError(error.message);
       return { success: true as const };
     });
 
@@ -71,7 +71,7 @@ export async function deleteProduto(id: string) {
   try {
     const result = await runDb(async (supabase) => {
       const { error } = await supabase.from("produtos").delete().eq("id", id);
-      if (error) return { error: error.message };
+      if (error) return dbError(error.message);
       return { success: true as const };
     });
 

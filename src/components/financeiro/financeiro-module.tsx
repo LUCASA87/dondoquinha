@@ -40,6 +40,7 @@ import { InputMoeda } from "@/components/ui/input-moeda";
 import { baixarRelatorioContasPDF } from "@/lib/relatorio-contas-pagar-pdf";
 import { formatCurrency, formatDate, formatMesAno } from "@/lib/format";
 import { invalidateAfterFinanceiroChange } from "@/lib/queries/page-cache";
+import { mutationError } from "@/lib/db/helpers";
 import type { ParcelaVenda, ContaAPagar } from "@/types/database";
 
 const LIMITE_CONTAS_PAGINA = 5;
@@ -86,8 +87,9 @@ export function FinanceiroModule({
   function handleBaixaConta(id: string) {
     startTransition(async () => {
       const result = await darBaixaConta(id);
-      if (result.error) {
-        toast(result.error, "error");
+      const err = mutationError(result);
+      if (err) {
+        toast(err, "error");
         return;
       }
       setContas((prev) => prev.filter((c) => c.id !== id));
@@ -308,15 +310,16 @@ function ContaForm({
 
     startTransition(async () => {
       const result = await createContaAPagar(formData);
-      if (result.error) {
-        setError(result.error);
+      const err = mutationError(result);
+      if (err) {
+        setError(err);
         return;
       }
       form.reset();
       setValor(0);
       setParcelas(1);
       setError(null);
-      onSucesso(result.contas ?? []);
+      onSucesso("contas" in result ? result.contas ?? [] : []);
     });
   }
 

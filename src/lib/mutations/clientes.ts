@@ -1,4 +1,4 @@
-import { runDb, mapDbError } from "@/lib/db/helpers";
+import { runDb, mapDbError, dbError } from "@/lib/db/helpers";
 import { invalidateAfterClientesChange } from "@/lib/queries/page-cache";
 
 export async function createCliente(formData: FormData) {
@@ -10,7 +10,7 @@ export async function createCliente(formData: FormData) {
       telefone: (formData.get("telefone") as string) || null,
       endereco: (formData.get("endereco") as string) || null,
     });
-    if (error) return { error: error.message };
+    if (error) return dbError(error.message);
     return { success: true as const };
   });
 
@@ -33,7 +33,7 @@ export async function updateCliente(id: string, formData: FormData) {
         endereco: (formData.get("endereco") as string) || null,
       })
       .eq("id", id);
-    if (error) return { error: error.message };
+    if (error) return dbError(error.message);
     return { success: true as const };
   });
 
@@ -48,7 +48,7 @@ export async function deleteCliente(id: string) {
   try {
     const result = await runDb(async (supabase) => {
     const { error } = await supabase.from("clientes").delete().eq("id", id);
-    if (error) return { error: error.message };
+    if (error) return dbError(error.message);
     return { success: true as const };
   });
 

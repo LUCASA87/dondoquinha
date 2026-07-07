@@ -34,6 +34,7 @@ import { mensagemWhatsAppCliente } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";
 import type { Cliente } from "@/types/database";
 import { invalidateAfterClientesChange } from "@/lib/queries/page-cache";
+import { mutationError } from "@/lib/db/helpers";
 
 interface ClientesTableProps {
   clientes: Cliente[];
@@ -59,8 +60,9 @@ function ClienteForm({
         ? await updateCliente(cliente.id, formData)
         : await createCliente(formData);
 
-      if (result.error) {
-        setError(result.error);
+      const err = mutationError(result);
+      if (err) {
+        setError(err);
       } else {
         invalidateAfterClientesChange();
         onDone();
@@ -146,8 +148,9 @@ export function ClientesTable({ clientes }: ClientesTableProps) {
     if (!ok) return;
     startTransition(async () => {
       const result = await deleteCliente(id);
-      if (result.error) {
-        toast(result.error, "error");
+      const err = mutationError(result);
+      if (err) {
+        toast(err, "error");
       } else {
         invalidateAfterClientesChange();
         toast("Cliente excluída com sucesso.", "success");
