@@ -1,17 +1,31 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import {
   fetchWithCache,
   readPageCache,
+  subscribePageCache,
   writePageCache,
 } from "@/lib/queries/page-cache";
 
 /**
- * Mostra cache na hora (memória ou localStorage) e atualiza em segundo plano.
+ * Mostra cache na hora e atualiza em segundo plano.
+ * Recarrega automaticamente quando o cache da página é invalidado (após cadastros).
  */
 export function usePageData<T>(cacheKey: string, fetcher: () => Promise<T>) {
   const [data, setData] = useState<T | null>(() => readPageCache<T>(cacheKey));
+
+  const reload = useCallback(
+    (force = true) => {
+      return fetchWithCache(cacheKey, fetcher, { force })
+        .then((fresh) => {
+          setData(fresh);
+          return fresh;
+        })
+        .catch(() => null as T | null);
+    },
+    [cacheKey, fetcher]
+  );
 
   useLayoutEffect(() => {
     let cancelled = false;
@@ -23,10 +37,16 @@ export function usePageData<T>(cacheKey: string, fetcher: () => Promise<T>) {
       })
       .catch(() => {});
 
+    const unsubscribe = subscribePageCache(cacheKey, () => {
+      if (cancelled) return;
+      void reload(true);
+    });
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
-  }, [cacheKey, fetcher]);
+  }, [cacheKey, fetcher, reload]);
 
   return data;
 }

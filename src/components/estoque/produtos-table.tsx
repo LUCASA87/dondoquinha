@@ -26,6 +26,7 @@ import { InputMoeda } from "@/components/ui/input-moeda";
 import { useAppMessages } from "@/components/ui/app-messages";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatItemNome } from "@/lib/format";
+import { validateProdutoNome } from "@/lib/validate";
 import type { Produto } from "@/types/database";
 import { invalidateAfterEstoqueChange } from "@/lib/queries/page-cache";
 import { mutationError } from "@/lib/db/helpers";
@@ -56,6 +57,13 @@ function ProdutoForm({
     }
 
     const formData = new FormData(e.currentTarget);
+
+    const nomeCheck = validateProdutoNome(formData.get("nome") as string);
+    if (!nomeCheck.ok) {
+      setError(nomeCheck.error);
+      return;
+    }
+
     formData.set("preco_custo", String(precoCusto));
     formData.set("preco_venda", String(precoVenda));
 
@@ -83,7 +91,7 @@ function ProdutoForm({
           name="nome"
           required
           defaultValue={produto?.nome ? formatItemNome(produto.nome) : ""}
-          placeholder="Ex: BATOM VERMELHO"
+          placeholder="Ex: BATOM VERMELHO (mín. 4 letras)"
           className="uppercase"
         />
       </div>

@@ -20,7 +20,7 @@ export interface Produto {
 export interface Cliente {
   id: string;
   nome: string;
-  cpf: string;
+  cpf: string | null;
   telefone: string | null;
   endereco: string | null;
   created_at: string;
@@ -127,7 +127,7 @@ export interface ClienteDebitoResumo {
 export interface ClienteComSaldo {
   id: string;
   nome: string;
-  cpf: string;
+  cpf: string | null;
   totalDevido: number;
 }
 

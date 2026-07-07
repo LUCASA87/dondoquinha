@@ -60,7 +60,8 @@ export function formatItemNome(text: string): string {
   return text.trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
 }
 
-export function formatCPF(value: string): string {
+export function formatCPF(value: string | null | undefined): string {
+  if (!value?.trim()) return "—";
   const digits = value.replace(/\D/g, "").slice(0, 11);
   return digits
     .replace(/(\d{3})(\d)/, "$1.$2")

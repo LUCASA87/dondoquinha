@@ -9,6 +9,24 @@ interface CacheEntry<T> {
 
 const store = new Map<string, CacheEntry<unknown>>();
 const inflight = new Map<string, Promise<unknown>>();
+const cacheListeners = new Map<string, Set<() => void>>();
+
+export function subscribePageCache(key: string, listener: () => void): () => void {
+  let listeners = cacheListeners.get(key);
+  if (!listeners) {
+    listeners = new Set();
+    cacheListeners.set(key, listeners);
+  }
+  listeners.add(listener);
+  return () => {
+    listeners?.delete(listener);
+    if (listeners?.size === 0) cacheListeners.delete(key);
+  };
+}
+
+function notifyPageCacheInvalidated(key: string): void {
+  cacheListeners.get(key)?.forEach((listener) => listener());
+}
 
 export const PAGE_CACHE_KEYS = {
   dashboard: "page:dashboard",
@@ -95,8 +113,10 @@ export function invalidatePageCache(key?: string): void {
     store.delete(key);
     inflight.delete(key);
     clearPersistedCache(key);
+    notifyPageCacheInvalidated(key);
     return;
   }
+  const keys = new Set<string>([...store.keys(), ...PERSIST_KEYS]);
   store.clear();
   inflight.clear();
   if (typeof window !== "undefined") {
@@ -104,6 +124,7 @@ export function invalidatePageCache(key?: string): void {
       clearPersistedCache(k);
     }
   }
+  keys.forEach(notifyPageCacheInvalidated);
 }
 
 /** Busca com cache em memória e deduplicação de requisições simultâneas. */

@@ -30,6 +30,7 @@ import { useAppMessages } from "@/components/ui/app-messages";
 import { WhatsAppButton } from "@/components/ui/whatsapp-button";
 import { ClienteDebitoPanel } from "@/components/financeiro/consulta-cliente-debito";
 import { formatCPF, formatPhone } from "@/lib/format";
+import { isValidCPF, normalizeCPF, parseClienteForm } from "@/lib/validate";
 import { mensagemWhatsAppCliente } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";
 import type { Cliente } from "@/types/database";
@@ -54,6 +55,12 @@ function ClienteForm({
     e.preventDefault();
     setError(null);
     const formData = new FormData(e.currentTarget);
+
+    const parsed = parseClienteForm(formData);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
 
     startTransition(async () => {
       const result = cliente
@@ -83,14 +90,20 @@ function ClienteForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="cpf">CPF</Label>
+        <Label htmlFor="cpf">CPF (opcional)</Label>
         <Input
           id="cpf"
           name="cpf"
-          required
-          defaultValue={cliente ? formatCPF(cliente.cpf) : ""}
+          defaultValue={cliente?.cpf ? formatCPF(cliente.cpf) : ""}
           placeholder="000.000.000-00"
           maxLength={14}
+          onBlur={(e) => {
+            const digits = normalizeCPF(e.target.value);
+            if (!digits) return;
+            if (!isValidCPF(digits)) {
+              setError("CPF inválido. Verifique os números digitados.");
+            }
+          }}
         />
       </div>
       <div className="space-y-2">
@@ -134,7 +147,7 @@ export function ClientesTable({ clientes }: ClientesTableProps) {
     return clientes.filter(
       (c) =>
         c.nome.toLowerCase().includes(termo) ||
-        c.cpf.includes(termo.replace(/\D/g, ""))
+        (c.cpf ?? "").includes(termo.replace(/\D/g, ""))
     );
   }, [clientes, busca]);
 

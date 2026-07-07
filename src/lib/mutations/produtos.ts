@@ -1,11 +1,14 @@
 import { runDb, mapDbError, dbError } from "@/lib/db/helpers";
-import { formatItemNome } from "@/lib/format";
+import { validateProdutoNome } from "@/lib/validate";
 import { invalidateAfterEstoqueChange } from "@/lib/queries/page-cache";
 
 export async function createProduto(formData: FormData) {
   try {
+    const nomeCheck = validateProdutoNome(formData.get("nome") as string);
+    if (!nomeCheck.ok) return { error: nomeCheck.error };
+
     const result = await runDb(async (supabase) => {
-      const nome = formatItemNome(formData.get("nome") as string);
+      const nome = nomeCheck.nome;
 
       const { data: existente } = await supabase
         .from("produtos")
@@ -44,11 +47,14 @@ export async function createProduto(formData: FormData) {
 
 export async function updateProduto(id: string, formData: FormData) {
   try {
+    const nomeCheck = validateProdutoNome(formData.get("nome") as string);
+    if (!nomeCheck.ok) return { error: nomeCheck.error };
+
     const result = await runDb(async (supabase) => {
       const { error } = await supabase
         .from("produtos")
         .update({
-          nome: formatItemNome(formData.get("nome") as string),
+          nome: nomeCheck.nome,
           codigo_sku: (formData.get("codigo_sku") as string) || null,
           quantidade: Number(formData.get("quantidade")),
           preco_custo: Number(formData.get("preco_custo")),

@@ -31,6 +31,7 @@ import { createVenda } from "@/lib/mutations/vendas";
 import { invalidateAfterVendasChange } from "@/lib/queries/page-cache";
 import { mutationError } from "@/lib/db/helpers";
 import { formatCurrency, formatDate, formatItemNome, formatItemNomeInput } from "@/lib/format";
+import { validateProdutoNome } from "@/lib/validate";
 import type { Cliente, Produto, Venda } from "@/types/database";
 import type { ComprovanteVendaData } from "@/lib/store";
 
@@ -128,13 +129,14 @@ export function VendasModule({ clientes, produtos, vendas }: VendasModuleProps) 
   }
 
   function adicionarManual() {
-    const nome = formatItemNome(nomeManual);
+    const nomeCheck = validateProdutoNome(nomeManual);
     const qtd = Math.max(1, Number(qtdManual.replace(",", ".")) || 1);
 
-    if (!nome) {
-      setError("Digite o nome do produto.");
+    if (!nomeCheck.ok) {
+      setError(nomeCheck.error);
       return;
     }
+    const nome = nomeCheck.nome;
     if (precoManual < 0.01) {
       setError("Informe o preço de venda.");
       return;
