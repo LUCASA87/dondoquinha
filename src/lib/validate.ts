@@ -8,6 +8,10 @@ export function normalizePhone(value: string): string {
   return value.replace(/\D/g, "").slice(0, 11);
 }
 
+export function normalizeClienteNome(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export function isValidCPF(value: string): boolean {
   const cpf = normalizeCPF(value);
   if (cpf.length !== 11) return false;

@@ -26,6 +26,9 @@ function formatDuplicateError(message: string): string | null {
   if (lower.includes("cpf")) {
     return "Este CPF já está cadastrado.";
   }
+  if (lower.includes("nome")) {
+    return "Já existe uma cliente com este nome.";
+  }
   if (lower.includes("telefone") || lower.includes("phone")) {
     return "Este telefone já está cadastrado.";
   }

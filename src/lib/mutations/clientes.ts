@@ -1,14 +1,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { runDb, mapDbError, dbError } from "@/lib/db/helpers";
-import { normalizePhone, parseClienteForm } from "@/lib/validate";
+import { normalizeClienteNome, normalizePhone, parseClienteForm } from "@/lib/validate";
 import { invalidateAfterClientesChange } from "@/lib/queries/page-cache";
 
 async function findClienteCadastroDuplicado(
   supabase: SupabaseClient,
+  nome: string,
   cpf: string | null,
   telefone: string | null,
   excludeId?: string
 ): Promise<string | null> {
+  const nomeNorm = normalizeClienteNome(nome);
+  if (nomeNorm) {
+    let query = supabase.from("clientes").select("id, nome");
+    if (excludeId) query = query.neq("id", excludeId);
+    const { data, error } = await query;
+    if (error) return null;
+    const nomeDuplicado = data?.some(
+      (cliente) => normalizeClienteNome(cliente.nome) === nomeNorm
+    );
+    if (nomeDuplicado) return "Já existe uma cliente com este nome.";
+  }
+
   if (cpf) {
     let query = supabase.from("clientes").select("id").eq("cpf", cpf).limit(1);
     if (excludeId) query = query.neq("id", excludeId);
@@ -40,6 +53,7 @@ export async function createCliente(formData: FormData) {
     const result = await runDb(async (supabase) => {
       const duplicado = await findClienteCadastroDuplicado(
         supabase,
+        parsed.nome,
         parsed.cpf,
         parsed.telefone
       );
@@ -70,6 +84,7 @@ export async function updateCliente(id: string, formData: FormData) {
     const result = await runDb(async (supabase) => {
       const duplicado = await findClienteCadastroDuplicado(
         supabase,
+        parsed.nome,
         parsed.cpf,
         parsed.telefone,
         id
