@@ -31,7 +31,7 @@ import {
   darBaixaConta,
   getContasPagasRelatorio,
   type PeriodoRelatorioContas,
-} from "@/app/actions/financeiro";
+} from "@/lib/mutations/financeiro";
 import { CrediarioReceber } from "@/components/financeiro/crediario-receber";
 import { RelatorioCrediarioRecebido } from "@/components/financeiro/relatorio-crediario-recebido";
 import { ConsultaClienteDebito } from "@/components/financeiro/consulta-cliente-debito";

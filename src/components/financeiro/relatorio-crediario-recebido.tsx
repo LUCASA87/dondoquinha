@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppMessages } from "@/components/ui/app-messages";
-import { getRecebimentosCrediario } from "@/app/actions/financeiro";
+import { getRecebimentosCrediario } from "@/lib/mutations/financeiro";
 import { baixarRelatorioCrediarioRecebidoPDF } from "@/lib/relatorio-crediario-recebido-pdf";
 
 function inicioMesAtual(): string {

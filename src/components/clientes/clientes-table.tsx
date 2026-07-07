@@ -25,7 +25,7 @@ import {
   createCliente,
   updateCliente,
   deleteCliente,
-} from "@/app/actions/clientes";
+} from "@/lib/mutations/clientes";
 import { useAppMessages } from "@/components/ui/app-messages";
 import { WhatsAppButton } from "@/components/ui/whatsapp-button";
 import { ClienteDebitoPanel } from "@/components/financeiro/consulta-cliente-debito";

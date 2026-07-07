@@ -27,10 +27,10 @@ import {
   getRelatorioClienteCompras,
   registrarPagamentoCrediario,
   type FiltroParcelasClientePDF,
-} from "@/app/actions/financeiro";
+} from "@/lib/mutations/financeiro";
 import { ComprovantePagamento } from "@/components/financeiro/comprovante-pagamento";
 import { ComprovanteVenda } from "@/components/vendas/comprovante-venda";
-import { getUltimaVendaComprovante } from "@/app/actions/vendas";
+import { getUltimaVendaComprovante } from "@/lib/mutations/vendas";
 import { useAppMessages } from "@/components/ui/app-messages";
 import { InputMoeda } from "@/components/ui/input-moeda";
 import { WhatsAppButton } from "@/components/ui/whatsapp-button";

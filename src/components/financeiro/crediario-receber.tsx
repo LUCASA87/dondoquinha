@@ -24,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SelecaoParcelaDebito } from "@/components/ui/selecao-botoes";
-import { registrarPagamentoCrediario, excluirParcelaCrediario } from "@/app/actions/financeiro";
+import { registrarPagamentoCrediario, excluirParcelaCrediario } from "@/lib/mutations/financeiro";
 import { ComprovantePagamento } from "@/components/financeiro/comprovante-pagamento";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";

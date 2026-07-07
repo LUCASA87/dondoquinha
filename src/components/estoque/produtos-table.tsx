@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createProduto, updateProduto, deleteProduto } from "@/app/actions/produtos";
+import { createProduto, updateProduto, deleteProduto } from "@/lib/mutations/produtos";
 import { InputMoeda } from "@/components/ui/input-moeda";
 import { useAppMessages } from "@/components/ui/app-messages";
 import { Badge } from "@/components/ui/badge";
