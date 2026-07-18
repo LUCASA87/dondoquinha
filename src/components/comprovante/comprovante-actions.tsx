@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowRight, Loader2, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAppMessages } from "@/components/ui/app-messages";
 import {
   baixarArquivosComprovante,
   compartilharNoClique,
   gerarArquivosComprovante,
+  imprimirArquivosProntos,
   isMobileDevice,
   obterCacheCompartilhamento,
   registrarCacheCompartilhamento,
@@ -56,6 +57,10 @@ export function ComprovanteActions({
     };
   }, [html, nomeArquivo]);
 
+  function obterProntos(): ArquivosComprovante | null {
+    return arquivosRef.current ?? arquivos ?? obterCacheCompartilhamento();
+  }
+
   function fallbackBaixar(prontos: ArquivosComprovante) {
     baixarArquivosComprovante(prontos, nomeArquivo);
     toast("Imagem baixada. Anexe no WhatsApp do PC.", "info");
@@ -67,10 +72,12 @@ export function ComprovanteActions({
       return;
     }
 
-    const prontos =
-      arquivosRef.current ?? arquivos ?? obterCacheCompartilhamento();
+    const prontos = obterProntos();
     if (!prontos) {
-      toast("Não foi possível preparar o comprovante. Tente fechar e abrir de novo.", "error");
+      toast(
+        "Não foi possível preparar o comprovante. Tente fechar e abrir de novo.",
+        "error"
+      );
       return;
     }
 
@@ -107,8 +114,7 @@ export function ComprovanteActions({
       return;
     }
 
-    const prontos =
-      arquivosRef.current ?? arquivos ?? obterCacheCompartilhamento();
+    const prontos = obterProntos();
     if (!prontos) {
       toast("Não foi possível preparar o comprovante.", "error");
       return;
@@ -119,8 +125,28 @@ export function ComprovanteActions({
     onFechar?.();
   }
 
+  function handleImprimir() {
+    if (gerando) {
+      toast("Aguarde, preparando comprovante...", "info");
+      return;
+    }
+
+    const prontos = obterProntos();
+    if (!prontos) {
+      toast("Não foi possível preparar o comprovante.", "error");
+      return;
+    }
+
+    const resultado = imprimirArquivosProntos(prontos, nomeArquivo);
+    if (resultado.downloaded) {
+      toast("PDF baixado para você imprimir.", "info");
+    } else {
+      toast("Abrindo impressão...", "info");
+    }
+  }
+
   return (
-    <div className="flex items-center justify-center gap-4 w-full">
+    <div className="flex items-center justify-center gap-3 w-full">
       <Button
         type="button"
         onClick={handleBaixar}
@@ -132,6 +158,19 @@ export function ComprovanteActions({
         aria-label="Baixar comprovante"
       >
         <ArrowDown className="h-7 w-7 stroke-[2.5]" />
+      </Button>
+
+      <Button
+        type="button"
+        onClick={handleImprimir}
+        disabled={gerando}
+        variant="outline"
+        size="icon"
+        className="h-14 w-14 rounded-2xl border-brand-red/25 bg-brand-cream/50 text-brand-red hover:bg-brand-cream hover:border-brand-red/40"
+        title="Imprimir"
+        aria-label="Imprimir comprovante"
+      >
+        <Printer className="h-7 w-7 stroke-[2.5]" />
       </Button>
 
       <Button
