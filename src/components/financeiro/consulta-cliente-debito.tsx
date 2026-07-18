@@ -223,81 +223,95 @@ export function ClienteDebitoPanel({
       />
 
       {!(showComprovante || showComprovanteVenda) && (
-      <div className="space-y-4">
-        <div className="rounded-xl bg-brand-cream/50 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 className="font-semibold text-lg text-brand-black">{resumo.cliente.nome}</h3>
-              <p className="text-sm text-brand-black/60 mt-1">
-                CPF: {formatCPF(resumo.cliente.cpf)}
-                {resumo.cliente.telefone && ` · Tel: ${formatPhone(resumo.cliente.telefone)}`}
-              </p>
+      <div className="min-w-0 space-y-4">
+        <div className="min-w-0 rounded-xl bg-brand-cream/50 p-3 sm:p-4">
+          <div className="min-w-0 space-y-3">
+            <div className="min-w-0">
+              <h3 className="break-words font-semibold text-base leading-snug text-brand-black sm:text-lg">
+                {resumo.cliente.nome}
+              </h3>
+              <div className="mt-1 space-y-0.5 text-sm text-brand-black/60">
+                <p>CPF: {formatCPF(resumo.cliente.cpf)}</p>
+                {resumo.cliente.telefone && (
+                  <p>Tel: {formatPhone(resumo.cliente.telefone)}</p>
+                )}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex min-w-0 flex-col gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                className="h-11 w-full justify-center touch-manipulation"
                 onClick={abrirUltimaCompra}
                 disabled={carregandoUltimaCompra}
               >
-                <Receipt className="h-4 w-4" />
+                <Receipt className="h-4 w-4 shrink-0" />
                 {carregandoUltimaCompra ? "Carregando..." : "Enviar última compra"}
               </Button>
-              <WhatsAppButton
-                telefone={resumo.cliente.telefone}
-                mensagem={mensagemWhatsAppCliente(resumo.cliente.nome)}
-                label="WhatsApp"
-                size="sm"
-              />
-              {resumo.totalDevido > 0 && (
+              <div
+                className={cn(
+                  "grid min-w-0 gap-2",
+                  resumo.totalDevido > 0 ? "grid-cols-2" : "grid-cols-1"
+                )}
+              >
                 <WhatsAppButton
                   telefone={resumo.cliente.telefone}
-                  mensagem={(() => {
-                    const parcela = parcelasPagaveis[0];
-                    const vendaParcela = parcela
-                      ? resumo.vendas.find((v) =>
-                          v.parcelas.some((p) => p.id === parcela.id)
-                        )
-                      : undefined;
-
-                    if (parcela && vendaParcela) {
-                      return mensagemCobrancaParcela({
-                        clienteNome: resumo.cliente.nome,
-                        valor: parcela.saldo_parcela,
-                        dataVencimento: parcela.data_vencimento,
-                        numeroParcela: parcela.numero_parcela,
-                        parcelasTotal: vendaParcela.parcelasTotal,
-                        numeroPedido: vendaParcela.numeroPedido,
-                        produtos: vendaParcela.produtos,
-                      });
-                    }
-
-                    return mensagemCobrancaDebito({
-                      clienteNome: resumo.cliente.nome,
-                      totalDevido: resumo.totalDevido,
-                      produtos: [...new Set(resumo.vendas.flatMap((v) => v.produtos))],
-                    });
-                  })()}
-                  label="Cobrar"
+                  mensagem={mensagemWhatsAppCliente(resumo.cliente.nome)}
+                  label="WhatsApp"
                   size="sm"
+                  className="h-11 w-full justify-center touch-manipulation"
                 />
-              )}
+                {resumo.totalDevido > 0 && (
+                  <WhatsAppButton
+                    telefone={resumo.cliente.telefone}
+                    mensagem={(() => {
+                      const parcela = parcelasPagaveis[0];
+                      const vendaParcela = parcela
+                        ? resumo.vendas.find((v) =>
+                            v.parcelas.some((p) => p.id === parcela.id)
+                          )
+                        : undefined;
+
+                      if (parcela && vendaParcela) {
+                        return mensagemCobrancaParcela({
+                          clienteNome: resumo.cliente.nome,
+                          valor: parcela.saldo_parcela,
+                          dataVencimento: parcela.data_vencimento,
+                          numeroParcela: parcela.numero_parcela,
+                          parcelasTotal: vendaParcela.parcelasTotal,
+                          numeroPedido: vendaParcela.numeroPedido,
+                          produtos: vendaParcela.produtos,
+                        });
+                      }
+
+                      return mensagemCobrancaDebito({
+                        clienteNome: resumo.cliente.nome,
+                        totalDevido: resumo.totalDevido,
+                        produtos: [...new Set(resumo.vendas.flatMap((v) => v.produtos))],
+                      });
+                    })()}
+                    label="Cobrar"
+                    size="sm"
+                    className="h-11 w-full justify-center touch-manipulation"
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        <Card className="border-brand-red/15 bg-brand-cream/30">
-          <CardContent className="pt-4 pb-4 space-y-3">
+        <Card className="min-w-0 border-brand-red/15 bg-brand-cream/30">
+          <CardContent className="space-y-3 pt-4 pb-4">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-red">
               PDF das compras desta cliente
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setFiltroPdfCliente("pagas")}
                 className={cn(
-                  "rounded-lg px-4 py-2 text-sm font-medium transition-colors touch-manipulation",
+                  "rounded-lg px-3 py-2.5 text-sm font-medium transition-colors touch-manipulation",
                   filtroPdfCliente === "pagas"
                     ? "bg-brand-red text-white"
                     : "border border-brand-black/15 bg-white text-brand-black/70"
@@ -309,7 +323,7 @@ export function ClienteDebitoPanel({
                 type="button"
                 onClick={() => setFiltroPdfCliente("abertas")}
                 className={cn(
-                  "rounded-lg px-4 py-2 text-sm font-medium transition-colors touch-manipulation",
+                  "rounded-lg px-3 py-2.5 text-sm font-medium transition-colors touch-manipulation",
                   filtroPdfCliente === "abertas"
                     ? "bg-brand-red text-white"
                     : "border border-brand-black/15 bg-white text-brand-black/70"
@@ -322,7 +336,7 @@ export function ClienteDebitoPanel({
               type="button"
               variant="outline"
               size="sm"
-              className="touch-manipulation"
+              className="h-11 w-full touch-manipulation"
               disabled={gerandoPdfCliente}
               onClick={gerarPdfComprasCliente}
             >
@@ -336,25 +350,25 @@ export function ClienteDebitoPanel({
           </CardContent>
         </Card>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Card>
+        <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-3">
+          <Card className="min-w-0">
             <CardContent className="pt-4">
               <p className="text-xs text-brand-black/60">Total em compras</p>
-              <p className="text-xl font-bold">{formatCurrency(resumo.totalCompras)}</p>
+              <p className="text-xl font-bold break-all">{formatCurrency(resumo.totalCompras)}</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="min-w-0">
             <CardContent className="pt-4">
               <p className="text-xs text-brand-black/60">Já pagou</p>
-              <p className="text-xl font-bold text-green-700">
+              <p className="text-xl font-bold break-all text-green-700">
                 {formatCurrency(resumo.totalPago)}
               </p>
             </CardContent>
           </Card>
-          <Card className="border-brand-red/30 bg-brand-red/5">
+          <Card className="min-w-0 border-brand-red/30 bg-brand-red/5">
             <CardContent className="pt-4">
               <p className="text-xs text-brand-black/60">Ainda deve</p>
-              <p className="text-2xl font-bold text-brand-red">
+              <p className="text-2xl font-bold break-all text-brand-red">
                 {formatCurrency(resumo.totalDevido)}
               </p>
             </CardContent>
@@ -366,33 +380,38 @@ export function ClienteDebitoPanel({
             Esta cliente não possui débitos em aberto. 🎉
           </div>
         ) : (
-          <div className="space-y-4">
-            <Button onClick={abrirPagamento} disabled={pending} size="lg">
+          <div className="min-w-0 space-y-4">
+            <Button
+              onClick={abrirPagamento}
+              disabled={pending}
+              size="lg"
+              className="h-12 w-full touch-manipulation"
+            >
               <DollarSign className="h-5 w-5" />
               Registrar Pagamento
             </Button>
 
             {resumo.vendas.map((venda) => (
-              <Card key={venda.id}>
+              <Card key={venda.id} className="min-w-0 overflow-hidden">
                 <CardHeader className="pb-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <CardTitle className="text-base">
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <CardTitle className="break-words text-base">
                       Pedido {venda.numeroPedido} — {formatDate(venda.data_venda)}
                     </CardTitle>
-                    <Badge variant="warning">
+                    <Badge variant="warning" className="w-fit shrink-0">
                       Falta {formatCurrency(venda.saldoRestante)}
                     </Badge>
                   </div>
                   {venda.obs && (
-                    <p className="text-sm text-brand-black/60 mt-1">Obs: {venda.obs}</p>
+                    <p className="mt-1 break-words text-sm text-brand-black/60">Obs: {venda.obs}</p>
                   )}
                   {venda.produtos.length > 0 && (
-                    <p className="text-xs text-brand-black/60 mt-1 uppercase">
+                    <p className="mt-1 break-words text-xs uppercase text-brand-black/60">
                       Produtos: {venda.produtos.join(", ")}
                     </p>
                   )}
                 </CardHeader>
-                <CardContent>
+                <CardContent className="min-w-0 px-3 sm:px-6">
                   <Table>
                     <TableHeader>
                       <TableRow>

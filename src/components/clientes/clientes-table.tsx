@@ -306,15 +306,20 @@ export function ClientesTable({ clientes, onRefresh }: ClientesTableProps) {
         <DialogContent
           hideClose={comprovanteAberto}
           className={cn(
-            "max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain",
+            "max-w-2xl",
             comprovanteAberto && "overflow-hidden border-0 bg-transparent p-0 shadow-none"
           )}
         >
           {!comprovanteAberto && (
-            <DialogHeader>
-              <DialogTitle>
-                {clienteDebito ? `Débitos — ${clienteDebito.nome}` : "Débitos"}
+            <DialogHeader className="min-w-0 text-left">
+              <DialogTitle className="break-words text-lg leading-snug sm:text-xl">
+                {clienteDebito ? `Débitos` : "Débitos"}
               </DialogTitle>
+              {clienteDebito && (
+                <p className="truncate text-sm font-medium text-brand-black/70 pr-2">
+                  {clienteDebito.nome}
+                </p>
+              )}
             </DialogHeader>
           )}
           {clienteDebito && (

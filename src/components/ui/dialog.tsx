@@ -49,7 +49,7 @@ const DialogContent = React.forwardRef<
         maxHeight: "calc(100dvh - 2rem)",
       }}
       className={cn(
-        "relative grid max-w-lg gap-4 overflow-y-auto overscroll-contain rounded-2xl border border-brand-red/10 bg-white p-6 shadow-xl",
+        "relative box-border grid min-w-0 max-w-lg gap-4 overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border border-brand-red/10 bg-white p-4 shadow-xl sm:p-6",
         className
       )}
     >
