@@ -232,6 +232,23 @@ export async function excluirParcelaCrediario(parcelaId: string) {
   return { success: true };
 }
 
+export async function apagarTudoCrediarioReceber() {
+  const supabase = await db();
+  const abertas = await getParcelasAbertas();
+
+  if (abertas.length === 0) {
+    return { error: "Não há nada a receber para apagar." };
+  }
+
+  const vendaIds = [...new Set(abertas.map((p) => p.venda_id))];
+
+  const { error } = await supabase.from("vendas").delete().in("id", vendaIds);
+
+  if (error) return dbError(error.message);
+
+  return { success: true as const, vendasApagadas: vendaIds.length };
+}
+
 export async function getParcelasAVencer(
   diasAhead = 30,
   opcoes?: { buscarProdutos?: boolean; limiteProdutos?: number }

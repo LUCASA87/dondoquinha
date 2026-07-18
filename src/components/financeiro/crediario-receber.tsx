@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { DollarSign, Trash2 } from "lucide-react";
+import { DollarSign, Eye, EyeOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppMessages } from "@/components/ui/app-messages";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { InputMoeda } from "@/components/ui/input-moeda";
@@ -24,13 +26,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SelecaoParcelaDebito } from "@/components/ui/selecao-botoes";
-import { registrarPagamentoCrediario, excluirParcelaCrediario } from "@/lib/mutations/financeiro";
+import {
+  apagarTudoCrediarioReceber,
+  registrarPagamentoCrediario,
+  excluirParcelaCrediario,
+} from "@/lib/mutations/financeiro";
 import { ComprovantePagamento } from "@/components/financeiro/comprovante-pagamento";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { filtrarParcelasPagaveis } from "@/lib/parcelas-utils";
-import { invalidateAfterFinanceiroChange } from "@/lib/queries/page-cache";
+import {
+  invalidateAfterFinanceiroChange,
+  invalidateAfterVendasChange,
+} from "@/lib/queries/page-cache";
 import { mutationError } from "@/lib/db/helpers";
+import { verificarSenhaLogin } from "@/lib/verificar-senha-login";
 import type { ParcelaVenda } from "@/types/database";
 import type { ComprovantePagamentoData } from "@/lib/store";
 
@@ -49,6 +59,10 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
   const [parcelas, setParcelas] = useState(initialParcelas);
   const [paginaParcelas, setPaginaParcelas] = useState(1);
   const [showPagamento, setShowPagamento] = useState(false);
+  const [showApagarTudo, setShowApagarTudo] = useState(false);
+  const [senhaApagar, setSenhaApagar] = useState("");
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [erroApagar, setErroApagar] = useState<string | null>(null);
   const [parcelaSelecionadaId, setParcelaSelecionadaId] = useState<string | null>(null);
   const [valorPago, setValorPago] = useState(0);
   const [obs, setObs] = useState("");
@@ -95,6 +109,13 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
     setValorPago(0);
     setObs("");
     setError(null);
+  }
+
+  function fecharApagarTudo() {
+    setShowApagarTudo(false);
+    setSenhaApagar("");
+    setMostrarSenha(false);
+    setErroApagar(null);
   }
 
   function confirmarPagamento() {
@@ -175,6 +196,32 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
     });
   }
 
+  function confirmarApagarTudo() {
+    setErroApagar(null);
+
+    startTransition(async () => {
+      const validacao = await verificarSenhaLogin(senhaApagar);
+      if (!validacao.ok) {
+        setErroApagar(validacao.error);
+        return;
+      }
+
+      const result = await apagarTudoCrediarioReceber();
+      const err = mutationError(result);
+      if (err) {
+        setErroApagar(err);
+        return;
+      }
+
+      setParcelas([]);
+      setPaginaParcelas(1);
+      invalidateAfterFinanceiroChange();
+      invalidateAfterVendasChange();
+      fecharApagarTudo();
+      toast("Tudo a receber foi apagado.", "success");
+    });
+  }
+
   return (
     <>
       <ComprovantePagamento
@@ -185,14 +232,34 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
 
       {!showComprovante && (
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 py-3 px-4">
+        <CardHeader className="flex flex-col gap-3 py-3 px-4 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base">Crediário — A Receber</CardTitle>
-          {parcelasPagaveis.length > 0 && (
-            <Button size="sm" onClick={abrirPagamento} disabled={pending}>
-              <DollarSign className="h-4 w-4" />
-              Registrar Pagamento
-            </Button>
-          )}
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            {parcelas.length > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-10 w-full border-red-200 text-red-700 hover:bg-red-50 sm:w-auto"
+                onClick={() => setShowApagarTudo(true)}
+                disabled={pending}
+              >
+                <Trash2 className="h-4 w-4" />
+                Apagar tudo
+              </Button>
+            )}
+            {parcelasPagaveis.length > 0 && (
+              <Button
+                size="sm"
+                className="h-10 w-full sm:w-auto"
+                onClick={abrirPagamento}
+                disabled={pending}
+              >
+                <DollarSign className="h-4 w-4" />
+                Registrar Pagamento
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="px-4 pb-4">
           {parcelas.length === 0 ? (
@@ -315,7 +382,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
       )}
 
       <Dialog open={showPagamento} onOpenChange={(open) => !open && fecharPagamento()}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Registrar Pagamento</DialogTitle>
           </DialogHeader>
@@ -384,6 +451,80 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
             >
               {pending ? "Salvando..." : "Confirmar e Gerar Comprovante"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showApagarTudo}
+        onOpenChange={(open) => {
+          if (!open) fecharApagarTudo();
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Apagar tudo a receber</DialogTitle>
+            <DialogDescription>
+              Isso apaga todas as vendas com parcelas em aberto do crediário.
+              Não dá para desfazer. Digite a senha de login para confirmar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              {parcelas.length} parcela(s) em aberto serão removidas.
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="senha_apagar_tudo">Senha de login</Label>
+              <div className="relative">
+                <Input
+                  id="senha_apagar_tudo"
+                  type={mostrarSenha ? "text" : "password"}
+                  value={senhaApagar}
+                  onChange={(e) => setSenhaApagar(e.target.value)}
+                  className="pr-11"
+                  autoComplete="current-password"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") confirmarApagarTudo();
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarSenha((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-brand-black/45 hover:text-brand-red"
+                  aria-label={mostrarSenha ? "Ocultar senha" : "Ver senha"}
+                >
+                  {mostrarSenha ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {erroApagar && <p className="text-sm text-red-600">{erroApagar}</p>}
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={fecharApagarTudo}
+                disabled={pending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="w-full bg-red-700 hover:bg-red-800"
+                onClick={confirmarApagarTudo}
+                disabled={pending || !senhaApagar.trim()}
+              >
+                {pending ? "Apagando..." : "Apagar tudo"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

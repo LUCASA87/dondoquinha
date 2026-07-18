@@ -43,6 +43,10 @@ export async function excluirParcelaCrediario(parcelaId: string) {
   return withFinanceiroMutation(() => financeiroDb.excluirParcelaCrediario(parcelaId));
 }
 
+export async function apagarTudoCrediarioReceber() {
+  return withFinanceiroMutation(() => financeiroDb.apagarTudoCrediarioReceber());
+}
+
 export async function createContaAPagar(formData: FormData) {
   return withFinanceiroMutation(() => financeiroDb.createContaAPagar(formData));
 }
