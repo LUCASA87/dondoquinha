@@ -37,7 +37,9 @@ const DialogContent = React.forwardRef<
     />
     <DialogPrimitive.Content
       ref={ref}
+      {...props}
       style={{
+        ...props.style,
         position: "fixed",
         left: "50%",
         top: "50%",
@@ -50,7 +52,6 @@ const DialogContent = React.forwardRef<
         "relative grid max-w-lg gap-4 overflow-y-auto overscroll-contain rounded-2xl border border-brand-red/10 bg-white p-6 shadow-xl",
         className
       )}
-      {...props}
     >
       {children}
       {!hideClose && (
