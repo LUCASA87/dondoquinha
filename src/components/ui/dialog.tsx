@@ -35,23 +35,29 @@ const DialogContent = React.forwardRef<
     <DialogOverlay
       className={cn(stackOnTop && "z-[100] bg-brand-cream", overlayClassName)}
     />
-    <DialogPrimitive.Content
-      ref={ref}
+    <div
       className={cn(
-        "fixed left-1/2 top-1/2 z-[60] grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl border border-brand-red/10 bg-white p-6 shadow-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain relative",
-        stackOnTop && "z-[101]",
-        className
+        "fixed inset-0 z-[60] flex items-center justify-center p-4 pointer-events-none",
+        stackOnTop && "z-[101]"
       )}
-      {...props}
     >
-      {children}
-      {!hideClose && (
-        <DialogPrimitive.Close className="absolute right-4 top-4 z-20 rounded-md p-1.5 text-brand-black/50 hover:bg-brand-black/5 hover:text-brand-black focus:outline-none focus:ring-2 focus:ring-brand-red/30">
-          <X className="h-5 w-5" />
-          <span className="sr-only">Fechar</span>
-        </DialogPrimitive.Close>
-      )}
-    </DialogPrimitive.Content>
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn(
+          "pointer-events-auto relative grid w-full max-w-lg gap-4 rounded-2xl border border-brand-red/10 bg-white p-6 shadow-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
+          className
+        )}
+        {...props}
+      >
+        {children}
+        {!hideClose && (
+          <DialogPrimitive.Close className="absolute right-4 top-4 z-20 rounded-md p-1.5 text-brand-black/50 hover:bg-brand-black/5 hover:text-brand-black focus:outline-none focus:ring-2 focus:ring-brand-red/30">
+            <X className="h-5 w-5" />
+            <span className="sr-only">Fechar</span>
+          </DialogPrimitive.Close>
+        )}
+      </DialogPrimitive.Content>
+    </div>
   </DialogPortal>
 ));
 DialogContent.displayName = DialogPrimitive.Content.displayName;
