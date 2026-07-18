@@ -51,7 +51,11 @@ const TUTORIAL_PASSOS = [
   },
 ] as const;
 
-export function ConfiguracoesDialog() {
+export function ConfiguracoesDialog({
+  onOpen,
+}: {
+  onOpen?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [aba, setAba] = useState<AbaConfig>("menu");
 
@@ -65,6 +69,7 @@ export function ConfiguracoesDialog() {
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
+        if (next) onOpen?.();
         if (!next) setAba("menu");
       }}
     >
@@ -73,13 +78,14 @@ export function ConfiguracoesDialog() {
           type="button"
           variant="outline"
           className="w-full justify-center gap-2 border-brand-red/20 text-brand-black/70 hover:bg-brand-cream"
+          onClick={() => onOpen?.()}
         >
           <Settings className="h-4 w-4 text-brand-red" />
           Configurações
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
             {aba === "menu" && "Configurações"}

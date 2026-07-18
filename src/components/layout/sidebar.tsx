@@ -147,7 +147,7 @@ export function Sidebar() {
         </nav>
 
         <div className="border-t border-brand-red/15 bg-brand-cream/50 p-4 space-y-3">
-          <ConfiguracoesDialog />
+          <ConfiguracoesDialog onOpen={() => setOpen(false)} />
           <Button
             type="button"
             variant="outline"
