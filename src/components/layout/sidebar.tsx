@@ -18,7 +18,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { logoutAction } from "@/app/actions/auth";
-import { TrocarSenhaDialog } from "@/components/auth/trocar-senha-dialog";
+import { ConfiguracoesDialog } from "@/components/auth/configuracoes-dialog";
 import { useNavigation } from "./navigation-context";
 import { prefetchPageByRoute } from "@/lib/queries/page-cache";
 import {
@@ -147,7 +147,7 @@ export function Sidebar() {
         </nav>
 
         <div className="border-t border-brand-red/15 bg-brand-cream/50 p-4 space-y-3">
-          <TrocarSenhaDialog />
+          <ConfiguracoesDialog />
           <Button
             type="button"
             variant="outline"

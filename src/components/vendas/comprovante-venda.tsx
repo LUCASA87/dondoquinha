@@ -40,27 +40,18 @@ export function ComprovanteVenda({
   const texto = comprovanteVendaTexto(data);
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (next) onOpenChange(true);
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         stackOnTop
-        hideClose
-        className="max-w-md p-0 gap-0 overflow-hidden border-0 shadow-none bg-brand-cream"
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
+        className="max-w-md max-h-[90vh] overflow-y-auto overscroll-contain p-0 gap-0 border-0 shadow-none bg-brand-cream"
       >
-        <div className="p-6 pb-0">
+        <div className="sticky top-0 z-10 bg-brand-cream/95 backdrop-blur-sm p-6 pb-3 pr-12">
           <DialogHeader>
-            <DialogTitle>Comprovante da Venda</DialogTitle>
+            <DialogTitle>Carnê da Venda</DialogTitle>
           </DialogHeader>
         </div>
 
-        <div className="p-6 pt-4 flex flex-col items-center gap-4">
+        <div className="px-6 pb-6 flex flex-col items-center gap-4">
           <ComprovanteActions
             html={html}
             texto={texto}
@@ -69,10 +60,10 @@ export function ComprovanteVenda({
             onFechar={() => onOpenChange(false)}
           />
           <p className="text-xs text-brand-black/50 text-center">
-            Baixe ou envie o comprovante para voltar
+            Role para ver o carnê completo · use o X para fechar
           </p>
 
-          <div className="w-full max-w-[320px] border border-brand-black/10 rounded-lg overflow-hidden shadow-sm">
+          <div className="w-full max-w-[320px] border border-brand-black/10 rounded-lg shadow-sm">
             <ReciboConteudo data={data} />
           </div>
         </div>

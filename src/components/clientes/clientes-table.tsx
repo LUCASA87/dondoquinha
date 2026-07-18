@@ -304,8 +304,9 @@ export function ClientesTable({ clientes, onRefresh }: ClientesTableProps) {
         }}
       >
         <DialogContent
+          hideClose={comprovanteAberto}
           className={cn(
-            "max-w-2xl max-h-[90vh] overflow-y-auto",
+            "max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain",
             comprovanteAberto && "overflow-hidden border-0 bg-transparent p-0 shadow-none"
           )}
         >

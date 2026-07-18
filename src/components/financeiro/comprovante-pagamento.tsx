@@ -36,31 +36,22 @@ export function ComprovantePagamento({
   const texto = comprovantePagamentoTexto(data);
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (next) onOpenChange(true);
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         stackOnTop
-        hideClose
-        className="max-w-sm p-0 gap-0 border-0 shadow-none bg-brand-cream"
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
+        className="max-w-sm max-h-[90vh] overflow-y-auto overscroll-contain p-0 gap-0 border-0 shadow-none bg-brand-cream"
       >
-        <div className="p-4 pb-0">
+        <div className="sticky top-0 z-10 bg-brand-cream/95 backdrop-blur-sm p-4 pb-2 pr-12">
           <DialogHeader>
             <DialogTitle className="text-base">Comprovante de Pagamento</DialogTitle>
           </DialogHeader>
         </div>
 
-        <div className="p-4 flex flex-col items-center gap-3">
+        <div className="px-4 pb-4 flex flex-col items-center gap-3">
           <p className="text-xs text-brand-black/50 text-center w-full">
-            Baixe ou envie o comprovante para voltar
+            Role para ver tudo · use o X para fechar
           </p>
-          <div className="w-full max-w-[280px] border border-brand-black/10 rounded-lg overflow-hidden shadow-sm">
+          <div className="w-full max-w-[280px] border border-brand-black/10 rounded-lg shadow-sm">
             <ReciboPagamento data={data} />
           </div>
 

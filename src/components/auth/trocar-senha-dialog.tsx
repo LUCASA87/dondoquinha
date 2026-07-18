@@ -97,9 +97,8 @@ async function validarSenhaAtual(
   }
 }
 
-export function TrocarSenhaDialog() {
+export function TrocarSenhaForm({ onSuccess }: { onSuccess?: () => void }) {
   const { toast } = useAppMessages();
-  const [open, setOpen] = useState(false);
   const [senhaAtual, setSenhaAtual] = useState("");
   const [senhaNova, setSenhaNova] = useState("");
   const [senhaConfirmar, setSenhaConfirmar] = useState("");
@@ -176,7 +175,7 @@ export function TrocarSenhaDialog() {
 
         toast("Senha alterada com sucesso.", "success");
         resetForm();
-        setOpen(false);
+        onSuccess?.();
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Erro ao trocar senha.";
@@ -186,13 +185,47 @@ export function TrocarSenhaDialog() {
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) resetForm();
-      }}
-    >
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <CampoSenha
+        id="senha_atual"
+        label="Senha atual"
+        name="senha_atual"
+        value={senhaAtual}
+        onChange={setSenhaAtual}
+        mostrar={mostrarAtual}
+        onToggleMostrar={() => setMostrarAtual((v) => !v)}
+      />
+      <CampoSenha
+        id="senha_nova"
+        label="Nova senha"
+        name="senha_nova"
+        value={senhaNova}
+        onChange={setSenhaNova}
+        mostrar={mostrarNova}
+        onToggleMostrar={() => setMostrarNova((v) => !v)}
+      />
+      <CampoSenha
+        id="senha_confirmar"
+        label="Confirmar nova senha"
+        name="senha_confirmar"
+        value={senhaConfirmar}
+        onChange={setSenhaConfirmar}
+        mostrar={mostrarConfirmar}
+        onToggleMostrar={() => setMostrarConfirmar((v) => !v)}
+      />
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <Button type="submit" className="w-full" disabled={pending}>
+        {pending ? "Salvando..." : "Salvar nova senha"}
+      </Button>
+    </form>
+  );
+}
+
+export function TrocarSenhaDialog() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
           type="button"
@@ -207,39 +240,7 @@ export function TrocarSenhaDialog() {
         <DialogHeader>
           <DialogTitle>Trocar senha</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <CampoSenha
-            id="senha_atual"
-            label="Senha atual"
-            name="senha_atual"
-            value={senhaAtual}
-            onChange={setSenhaAtual}
-            mostrar={mostrarAtual}
-            onToggleMostrar={() => setMostrarAtual((v) => !v)}
-          />
-          <CampoSenha
-            id="senha_nova"
-            label="Nova senha"
-            name="senha_nova"
-            value={senhaNova}
-            onChange={setSenhaNova}
-            mostrar={mostrarNova}
-            onToggleMostrar={() => setMostrarNova((v) => !v)}
-          />
-          <CampoSenha
-            id="senha_confirmar"
-            label="Confirmar nova senha"
-            name="senha_confirmar"
-            value={senhaConfirmar}
-            onChange={setSenhaConfirmar}
-            mostrar={mostrarConfirmar}
-            onToggleMostrar={() => setMostrarConfirmar((v) => !v)}
-          />
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? "Salvando..." : "Salvar nova senha"}
-          </Button>
-        </form>
+        <TrocarSenhaForm onSuccess={() => setOpen(false)} />
       </DialogContent>
     </Dialog>
   );
