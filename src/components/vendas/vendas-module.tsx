@@ -30,7 +30,7 @@ import { InputMoeda } from "@/components/ui/input-moeda";
 import { createVenda } from "@/lib/mutations/vendas";
 import { mutationError } from "@/lib/db/helpers";
 import { formatCurrency, formatDate, formatItemNome, formatItemNomeInput } from "@/lib/format";
-import { datasPadraoParcelas, validarDatasParcelas } from "@/lib/parcelas-datas";
+import { datasAPartirDaPrimeira, datasPadraoParcelas, validarDatasParcelas } from "@/lib/parcelas-datas";
 import { validateProdutoNome } from "@/lib/validate";
 import type { Cliente, Produto, Venda } from "@/types/database";
 import type { ComprovanteVendaData } from "@/lib/store";
@@ -247,14 +247,17 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
     setParcelas(n);
     setDatasVencimento((prev) => {
       if (n === prev.length) return prev;
-      if (n < prev.length) return prev.slice(0, n);
-      const extras = datasPadraoParcelas(n).slice(prev.length);
-      return [...prev, ...extras];
+      const primeira = prev[0];
+      if (primeira) return datasAPartirDaPrimeira(primeira, n);
+      return datasPadraoParcelas(n);
     });
   }
 
   function alterarDataParcela(index: number, valor: string) {
     setDatasVencimento((prev) => {
+      if (index === 0) {
+        return datasAPartirDaPrimeira(valor, prev.length);
+      }
       const next = [...prev];
       next[index] = valor;
       return next;
@@ -515,8 +518,9 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
               {parcelas > 0 && (
                 <div className="space-y-3 -mt-1">
                   <p className="text-sm text-brand-black/60">
-                    {parcelas}x de {formatCurrency(total / parcelas)}. Ajuste a
-                    data de cada parcela se quiser (sugestão: a cada 30 dias).
+                    {parcelas}x de {formatCurrency(total / parcelas)}. Ao mudar a
+                    1ª data, as outras vão de 30 em 30 dias. Ainda dá para
+                    ajustar cada uma se precisar.
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {datasVencimento.map((data, index) => (
