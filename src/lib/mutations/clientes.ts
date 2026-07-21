@@ -114,6 +114,23 @@ export async function updateCliente(id: string, formData: FormData) {
 export async function deleteCliente(id: string) {
   try {
     const result = await runDb(async (supabase) => {
+      const { data: cliente, error: fetchError } = await supabase
+        .from("clientes")
+        .select("nome")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (fetchError) return dbError(fetchError.message, fetchError.code);
+      if (!cliente) return { error: "Cliente não encontrada." };
+
+      // Guarda o nome nas vendas antes de apagar (FK zera o cliente_id)
+      const { error: nomeError } = await supabase
+        .from("vendas")
+        .update({ cliente_nome: cliente.nome })
+        .eq("cliente_id", id);
+
+      if (nomeError) return dbError(nomeError.message, nomeError.code);
+
       const { error } = await supabase.from("clientes").delete().eq("id", id);
       if (error) return dbError(error.message, error.code);
       return { success: true as const };

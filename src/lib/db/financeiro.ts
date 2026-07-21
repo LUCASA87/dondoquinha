@@ -11,6 +11,7 @@ import {
   mapItensComprovante,
 } from "@/lib/venda-itens";
 import { formatCPF } from "@/lib/format";
+import { nomeClienteDaVenda } from "@/lib/cliente-venda-nome";
 
 async function getTotalPagoVenda(supabase: SupabaseClient, vendaId: string) {
   const { data } = await supabase
@@ -142,7 +143,7 @@ export async function registrarPagamentoCrediario(data: {
   const comprovante: ComprovantePagamentoData = {
     numeroPedido,
     dataPagamento,
-    clienteNome: venda.clientes?.nome ?? "—",
+    clienteNome: nomeClienteDaVenda(venda),
     parcelaNumero: parcelaInicialNumero,
     parcelasTotal: venda.parcelas,
     valorPagoAgora: valorPago,
@@ -165,7 +166,7 @@ export async function getParcelasAbertas(): Promise<
   const { data, error } = await supabase
     .from("parcelas_vendas")
     .select(
-      "id, venda_id, numero_parcela, valor_parcela, valor_pago, data_vencimento, status, vendas(id, valor_total, parcelas, clientes(nome))"
+      "id, venda_id, numero_parcela, valor_parcela, valor_pago, data_vencimento, status, vendas(id, valor_total, parcelas, cliente_nome, clientes(nome))"
     )
     .eq("status", "pendente")
     .order("data_vencimento");
@@ -284,7 +285,7 @@ export async function getParcelasAVencer(
 
   const { data, error } = await supabase
     .from("parcelas_vendas")
-    .select("*, vendas(id, parcelas, clientes(id, nome, telefone))")
+    .select("*, vendas(id, parcelas, cliente_nome, clientes(id, nome, telefone))")
     .eq("status", "pendente")
     .lte("data_vencimento", limiteStr)
     .order("data_vencimento");
@@ -319,6 +320,7 @@ export async function getParcelasAVencer(
       const venda = p.vendas as {
         id: string;
         parcelas: number;
+        cliente_nome?: string | null;
         clientes: { id: string; nome: string; telefone: string | null } | null;
       } | null;
       const cliente = venda?.clientes;
@@ -340,7 +342,7 @@ export async function getParcelasAVencer(
         data_vencimento: venc,
         numero_pedido: vendaId.replace(/-/g, "").slice(0, 8).toUpperCase(),
         cliente_id: cliente?.id ?? "",
-        cliente_nome: cliente?.nome ?? "—",
+        cliente_nome: nomeClienteDaVenda(venda),
         cliente_telefone: cliente?.telefone ?? null,
         produtos: produtosPorVenda.get(vendaId) ?? [],
         status_vencimento,
@@ -693,7 +695,7 @@ export async function getRecebimentosCrediario(
 
   const { data, error } = await supabase
     .from("pagamentos_crediario")
-    .select("valor_pago, data_pagamento, obs, venda_id, vendas(clientes(nome))")
+    .select("valor_pago, data_pagamento, obs, venda_id, vendas(cliente_nome, clientes(nome))")
     .gte("data_pagamento", dataInicio)
     .lte("data_pagamento", dataFim)
     .order("data_pagamento", { ascending: false });
@@ -705,7 +707,7 @@ export async function getRecebimentosCrediario(
     const pedido = String(p.venda_id).replace(/-/g, "").slice(0, 8).toUpperCase();
     return {
       data: p.data_pagamento as string,
-      cliente: venda?.clientes?.nome ?? "—",
+      cliente: nomeClienteDaVenda(venda),
       pedido,
       valor: Number(p.valor_pago),
       obs: (p.obs as string | null) ?? "",

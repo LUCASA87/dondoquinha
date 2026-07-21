@@ -33,10 +33,17 @@ export async function createVenda(data: {
   const datasOk = validarDatasParcelas(parcelas, data.datas_vencimento);
   if (!datasOk.ok) return { error: datasOk.error };
 
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("nome")
+    .eq("id", data.cliente_id)
+    .single();
+
   const { data: venda, error: vendaError } = await supabase
     .from("vendas")
     .insert({
       cliente_id: data.cliente_id,
+      cliente_nome: cliente?.nome ?? null,
       valor_total,
       forma_pagamento: "crediario",
       parcelas,
@@ -53,12 +60,6 @@ export async function createVenda(data: {
 
   const numeroPedido = venda.id.replace(/-/g, "").slice(0, 8).toUpperCase();
   const dataCompra = new Date().toISOString().split("T")[0];
-
-  const { data: cliente } = await supabase
-    .from("clientes")
-    .select("nome")
-    .eq("id", data.cliente_id)
-    .single();
 
   const itensInsert = data.itens.map((item) => ({
     venda_id: venda.id,

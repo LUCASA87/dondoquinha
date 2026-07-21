@@ -30,6 +30,7 @@ import { InputMoeda } from "@/components/ui/input-moeda";
 import { createVenda } from "@/lib/mutations/vendas";
 import { mutationError } from "@/lib/db/helpers";
 import { formatCurrency, formatDate, formatItemNome, formatItemNomeInput } from "@/lib/format";
+import { nomeClienteDaVenda } from "@/lib/cliente-venda-nome";
 import { datasAPartirDaPrimeira, datasPadraoParcelas, validarDatasParcelas } from "@/lib/parcelas-datas";
 import { validateProdutoNome } from "@/lib/validate";
 import type { Cliente, Produto, Venda } from "@/types/database";
@@ -595,7 +596,7 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
               {vendas.map((v) => (
                 <TableRow key={v.id}>
                   <TableCell>{formatDate(v.data_venda)}</TableCell>
-                  <TableCell>{v.clientes?.nome ?? "—"}</TableCell>
+                  <TableCell>{nomeClienteDaVenda(v)}</TableCell>
                   <TableCell>{v.parcelas}x</TableCell>
                   <TableCell>
                     <Badge variant={v.status === "pago" ? "success" : "warning"}>

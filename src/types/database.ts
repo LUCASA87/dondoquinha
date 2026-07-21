@@ -29,6 +29,7 @@ export interface Cliente {
 export interface Venda {
   id: string;
   cliente_id: string | null;
+  cliente_nome: string | null;
   valor_total: number;
   forma_pagamento: FormaPagamento;
   parcelas: number;

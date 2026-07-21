@@ -158,7 +158,7 @@ export async function queryParcelasAbertas(
   const { data, error } = await supabase
     .from("parcelas_vendas")
     .select(
-      "id, venda_id, numero_parcela, valor_parcela, valor_pago, data_vencimento, status, vendas(id, valor_total, parcelas, clientes(nome))"
+      "id, venda_id, numero_parcela, valor_parcela, valor_pago, data_vencimento, status, vendas(id, valor_total, parcelas, cliente_nome, clientes(nome))"
     )
     .eq("status", "pendente")
     .order("data_vencimento");
@@ -195,7 +195,7 @@ export async function queryVendas(
   const { data, error } = await supabase
     .from("vendas")
     .select(
-      "id, cliente_id, valor_total, forma_pagamento, parcelas, status, obs, data_venda, created_at, clientes(nome)"
+      "id, cliente_id, cliente_nome, valor_total, forma_pagamento, parcelas, status, obs, data_venda, created_at, clientes(nome)"
     )
     .order("created_at", { ascending: false })
     .limit(limit);

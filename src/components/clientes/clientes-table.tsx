@@ -156,7 +156,8 @@ export function ClientesTable({ clientes, onRefresh }: ClientesTableProps) {
   async function handleDelete(id: string) {
     const ok = await confirm({
       title: "Excluir cliente",
-      message: "Tem certeza que deseja excluir esta cliente?",
+      message:
+        "Excluir esta cliente da lista? As vendas e o crediário dela continuam salvos com o nome.",
       confirmLabel: "Excluir",
       variant: "danger",
     });

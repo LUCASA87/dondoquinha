@@ -33,6 +33,7 @@ import {
 } from "@/lib/mutations/financeiro";
 import { ComprovantePagamento } from "@/components/financeiro/comprovante-pagamento";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { nomeClienteDaVenda } from "@/lib/cliente-venda-nome";
 import { cn } from "@/lib/utils";
 import { filtrarParcelasPagaveis } from "@/lib/parcelas-utils";
 import {
@@ -172,7 +173,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
   }
 
   async function handleExcluirParcela(p: ParcelaAberta) {
-    const cliente = p.vendas?.clientes?.nome ?? "cliente";
+    const cliente = nomeClienteDaVenda(p.vendas);
     const parcelaLabel = `${p.numero_parcela}/${p.vendas?.parcelas ?? "?"}`;
 
     const ok = await confirm({
@@ -301,7 +302,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                               !podePagar && "text-brand-black/50"
                             )}
                           >
-                            {p.vendas?.clientes?.nome ?? "—"}
+                            {nomeClienteDaVenda(p.vendas)}
                           </TableCell>
                           <TableCell
                             className={cn(
@@ -400,7 +401,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                 id: p.id,
                 numero: p.numero_parcela,
                 saldo: p.saldo_parcela,
-                labelExtra: p.vendas?.clientes?.nome ?? "",
+                labelExtra: nomeClienteDaVenda(p.vendas),
               }))}
               value={parcelaSelecionadaId}
               onChange={setParcelaSelecionadaId}
@@ -410,7 +411,8 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
             {parcelaSelecionada && (
               <div className="rounded-xl bg-brand-cream/50 p-4 text-sm space-y-1">
                 <p>
-                  <strong>Cliente:</strong> {parcelaSelecionada.vendas?.clientes?.nome}
+                  <strong>Cliente:</strong>{" "}
+                  {nomeClienteDaVenda(parcelaSelecionada.vendas)}
                 </p>
                 <p>
                   <strong>Vencimento:</strong> {formatDate(parcelaSelecionada.data_vencimento)}

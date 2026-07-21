@@ -42,6 +42,22 @@ export async function updateCliente(id: string, formData: FormData) {
 export async function deleteCliente(id: string) {
   const supabase = getSupabase();
 
+  const { data: cliente, error: fetchError } = await supabase
+    .from("clientes")
+    .select("nome")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (fetchError) return { error: fetchError.message };
+  if (!cliente) return { error: "Cliente não encontrada." };
+
+  const { error: nomeError } = await supabase
+    .from("vendas")
+    .update({ cliente_nome: cliente.nome })
+    .eq("cliente_id", id);
+
+  if (nomeError) return { error: nomeError.message };
+
   const { error } = await supabase.from("clientes").delete().eq("id", id);
 
   if (error) return { error: error.message };
