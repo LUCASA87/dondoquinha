@@ -190,8 +190,14 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
         toast(err, "error");
         return;
       }
-      toast("Parcela excluída.", "success");
+      toast(
+        "vendaApagada" in result && result.vendaApagada
+          ? "Venda excluída e estoque devolvido."
+          : "Parcela excluída.",
+        "success"
+      );
       invalidateAfterFinanceiroChange();
+      invalidateAfterVendasChange();
       setParcelas((prev) => prev.filter((item) => item.id !== p.id));
     });
   }

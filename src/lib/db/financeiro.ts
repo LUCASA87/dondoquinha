@@ -1,5 +1,6 @@
 import type { LinhaRelatorioConta } from "@/lib/relatorio-contas-pagar-pdf";
 import { db, mapDbError, dbError } from "@/lib/db/helpers";
+import { devolverEstoqueVenda } from "@/lib/db/estoque-venda";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ComprovantePagamentoData } from "@/lib/store";
 import type { ClienteDebitoResumo, StatusPagamento, ParcelaAVencer, ParcelaVenda } from "@/types/database";
@@ -213,8 +214,20 @@ export async function excluirParcelaCrediario(parcelaId: string) {
     .order("numero_parcela");
 
   if (!restantes?.length) {
-    await supabase.from("vendas").delete().eq("id", vendaId);
-  } else if (venda) {
+    // Devolve estoque antes de apagar a venda (cascade remove os itens)
+    const devolucao = await devolverEstoqueVenda(supabase, vendaId);
+    if ("error" in devolucao) return devolucao;
+
+    const { error: vendaError } = await supabase
+      .from("vendas")
+      .delete()
+      .eq("id", vendaId);
+    if (vendaError) return dbError(vendaError.message);
+
+    return { success: true, vendaApagada: true as const };
+  }
+
+  if (venda) {
     const novoTotal = Math.max(0, Math.round((Number(venda.valor_total) - valorParcela) * 100) / 100);
     const totalPago = restantes.reduce((sum, p) => sum + Number(p.valor_pago ?? 0), 0);
     const quitada = totalPago >= novoTotal - 0.001;
@@ -241,6 +254,11 @@ export async function apagarTudoCrediarioReceber() {
   }
 
   const vendaIds = [...new Set(abertas.map((p) => p.venda_id))];
+
+  for (const vendaId of vendaIds) {
+    const devolucao = await devolverEstoqueVenda(supabase, vendaId);
+    if ("error" in devolucao) return devolucao;
+  }
 
   const { error } = await supabase.from("vendas").delete().in("id", vendaIds);
 

@@ -1,6 +1,9 @@
 import { mapDbError } from "@/lib/db/helpers";
 import * as financeiroDb from "@/lib/db/financeiro";
-import { invalidateAfterFinanceiroChange } from "@/lib/queries/page-cache";
+import {
+  invalidateAfterFinanceiroChange,
+  invalidateAfterVendasChange,
+} from "@/lib/queries/page-cache";
 
 export type {
   PeriodoRelatorioContas,
@@ -40,11 +43,23 @@ export async function registrarPagamentoCrediario(
 }
 
 export async function excluirParcelaCrediario(parcelaId: string) {
-  return withFinanceiroMutation(() => financeiroDb.excluirParcelaCrediario(parcelaId));
+  const result = await withFinanceiroMutation(() =>
+    financeiroDb.excluirParcelaCrediario(parcelaId)
+  );
+  if ("success" in result && result.success) {
+    invalidateAfterVendasChange();
+  }
+  return result;
 }
 
 export async function apagarTudoCrediarioReceber() {
-  return withFinanceiroMutation(() => financeiroDb.apagarTudoCrediarioReceber());
+  const result = await withFinanceiroMutation(() =>
+    financeiroDb.apagarTudoCrediarioReceber()
+  );
+  if ("success" in result && result.success) {
+    invalidateAfterVendasChange();
+  }
+  return result;
 }
 
 export async function createContaAPagar(formData: FormData) {

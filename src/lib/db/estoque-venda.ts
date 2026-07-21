@@ -96,3 +96,69 @@ export async function baixarEstoqueVenda(
 
   return { success: true };
 }
+
+/**
+ * Devolve ao estoque os itens de uma venda.
+ * Se o produto tinha sido apagado ao zerar, recria pelo nome/descrição.
+ * Chamar ANTES de apagar a venda (precisa dos venda_itens).
+ */
+export async function devolverEstoqueVenda(
+  supabase: SupabaseClient,
+  vendaId: string
+): Promise<{ error: string } | { success: true }> {
+  const { data: itens, error } = await supabase
+    .from("venda_itens")
+    .select("produto_id, descricao, quantidade, preco_unitario, preco_custo")
+    .eq("venda_id", vendaId);
+
+  if (error) return dbError(error.message, error.code);
+  if (!itens?.length) return { success: true };
+
+  for (const item of itens) {
+    const qtd = Number(item.quantidade);
+    if (qtd <= 0) continue;
+
+    if (item.produto_id) {
+      const { data: produto } = await supabase
+        .from("produtos")
+        .select("id, quantidade")
+        .eq("id", item.produto_id)
+        .maybeSingle();
+
+      if (produto) {
+        const { error: upError } = await supabase
+          .from("produtos")
+          .update({ quantidade: Number(produto.quantidade) + qtd })
+          .eq("id", produto.id);
+        if (upError) return dbError(upError.message, upError.code);
+        continue;
+      }
+    }
+
+    const nome = formatItemNome(String(item.descricao || "PRODUTO"));
+    const { data: existente } = await supabase
+      .from("produtos")
+      .select("id, quantidade")
+      .eq("nome", nome)
+      .maybeSingle();
+
+    if (existente) {
+      const { error: upError } = await supabase
+        .from("produtos")
+        .update({ quantidade: Number(existente.quantidade) + qtd })
+        .eq("id", existente.id);
+      if (upError) return dbError(upError.message, upError.code);
+      continue;
+    }
+
+    const { error: insError } = await supabase.from("produtos").insert({
+      nome,
+      quantidade: qtd,
+      preco_venda: Number(item.preco_unitario),
+      preco_custo: Number(item.preco_custo ?? 0),
+    });
+    if (insError) return dbError(insError.message, insError.code);
+  }
+
+  return { success: true };
+}

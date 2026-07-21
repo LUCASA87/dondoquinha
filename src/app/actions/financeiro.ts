@@ -1,8 +1,9 @@
 "use server";
 
-import { revalidateFinanceiro } from "@/lib/revalidate-app";
+import { revalidateFinanceiro, revalidateVendas } from "@/lib/revalidate-app";
 import type { LinhaRelatorioConta } from "@/lib/relatorio-contas-pagar-pdf";
 import { getSupabase } from "@/lib/supabase/data";
+import { devolverEstoqueVenda } from "@/lib/db/estoque-venda";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ComprovantePagamentoData } from "@/lib/store";
 import type { ClienteDebitoResumo, StatusPagamento, ParcelaAVencer, ParcelaVenda } from "@/types/database";
@@ -218,8 +219,21 @@ export async function excluirParcelaCrediario(parcelaId: string) {
     .order("numero_parcela");
 
   if (!restantes?.length) {
-    await supabase.from("vendas").delete().eq("id", vendaId);
-  } else if (venda) {
+    const devolucao = await devolverEstoqueVenda(supabase, vendaId);
+    if ("error" in devolucao) return devolucao;
+
+    const { error: vendaError } = await supabase
+      .from("vendas")
+      .delete()
+      .eq("id", vendaId);
+    if (vendaError) return { error: vendaError.message };
+
+    revalidateFinanceiro();
+    revalidateVendas();
+    return { success: true };
+  }
+
+  if (venda) {
     const novoTotal = Math.max(0, Math.round((Number(venda.valor_total) - valorParcela) * 100) / 100);
     const totalPago = restantes.reduce((sum, p) => sum + Number(p.valor_pago ?? 0), 0);
     const quitada = totalPago >= novoTotal - 0.001;
