@@ -159,6 +159,79 @@ export async function createVenda(data: {
   return { success: true, comprovante };
 }
 
+export async function updateVendaStatus(
+  vendaId: string,
+  status: "pago" | "pendente"
+) {
+  const supabase = getSupabase();
+
+  if (status !== "pago" && status !== "pendente") {
+    return { error: "Situação inválida." };
+  }
+
+  const { data: venda, error: vendaErr } = await supabase
+    .from("vendas")
+    .select("id, status")
+    .eq("id", vendaId)
+    .single();
+
+  if (vendaErr || !venda) {
+    return { error: vendaErr?.message ?? "Venda não encontrada." };
+  }
+
+  if (venda.status === status) {
+    revalidateVendas();
+    return { success: true as const };
+  }
+
+  const { error: upVenda } = await supabase
+    .from("vendas")
+    .update({ status })
+    .eq("id", vendaId);
+
+  if (upVenda) return { error: upVenda.message };
+
+  const { data: parcelas, error: parcErr } = await supabase
+    .from("parcelas_vendas")
+    .select("id, valor_parcela")
+    .eq("venda_id", vendaId);
+
+  if (parcErr) return { error: parcErr.message };
+
+  if (status === "pago") {
+    for (const p of parcelas ?? []) {
+      const { error } = await supabase
+        .from("parcelas_vendas")
+        .update({
+          status: "pago",
+          valor_pago: Number(p.valor_parcela),
+        })
+        .eq("id", p.id);
+      if (error) return { error: error.message };
+    }
+  } else {
+    const { error: delPag } = await supabase
+      .from("pagamentos_crediario")
+      .delete()
+      .eq("venda_id", vendaId);
+    if (delPag) return { error: delPag.message };
+
+    for (const p of parcelas ?? []) {
+      const { error } = await supabase
+        .from("parcelas_vendas")
+        .update({
+          status: "pendente",
+          valor_pago: 0,
+        })
+        .eq("id", p.id);
+      if (error) return { error: error.message };
+    }
+  }
+
+  revalidateVendas();
+  return { success: true as const };
+}
+
 export async function getUltimaVendaComprovante(
   clienteId: string
 ): Promise<{ comprovante: ComprovanteVendaData } | { error: string }> {

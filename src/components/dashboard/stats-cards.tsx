@@ -103,18 +103,26 @@ function StatCard({ item, isLoading }: { item: StatItem; isLoading?: boolean }) 
 
 export function StatsCards({
   initialStats,
-  totalAPagar,
   totalAReceber: initialAReceber,
   isLoading = false,
 }: StatsCardsProps) {
   const [stats, setStats] = useState(initialStats);
   const [totalAReceber, setTotalAReceber] = useState(initialAReceber);
+  const [totalContasPagas, setTotalContasPagas] = useState(0);
   const [mesFiltro, setMesFiltro] = useState(mesAtualInput);
+  const [mesFiltroPagar, setMesFiltroPagar] = useState(mesAtualInput);
+  const [totalAPagarAbertoMes, setTotalAPagarAbertoMes] = useState(0);
+  const [totalAPagarPagasMes, setTotalAPagarPagasMes] = useState(0);
+  const [qtdAbertoMes, setQtdAbertoMes] = useState(0);
+  const [qtdPagasMes, setQtdPagasMes] = useState(0);
   const [aEntrarMes, setAEntrarMes] = useState(0);
   const [qtdParcelasMes, setQtdParcelasMes] = useState(0);
   const [brutoVendasMes, setBrutoVendasMes] = useState(0);
   const [lucroVendasMes, setLucroVendasMes] = useState(0);
+  const [recebidoMes, setRecebidoMes] = useState(0);
+  const [qtdRecebidoMes, setQtdRecebidoMes] = useState(0);
   const [carregandoMes, setCarregandoMes] = useState(false);
+  const [carregandoPagar, setCarregandoPagar] = useState(false);
 
   const fetchEstoque = useCallback(async () => {
     const supabase = createClient();
@@ -155,23 +163,82 @@ export function StatsCards({
     setTotalAReceber(total);
   }, []);
 
+  const fetchAPagarMes = useCallback(async (mesAno: string) => {
+    setCarregandoPagar(true);
+    try {
+      const supabase = createClient();
+      const { inicio, fim } = intervaloDoMes(mesAno);
+      const { data } = await supabase
+        .from("contas_a_pagar")
+        .select("valor, status, data_vencimento, data_pagamento");
+
+      if (!data) {
+        setTotalAPagarAbertoMes(0);
+        setTotalAPagarPagasMes(0);
+        setQtdAbertoMes(0);
+        setQtdPagasMes(0);
+        setTotalContasPagas(0);
+        return;
+      }
+
+      let abertoMes = 0;
+      let pagasMes = 0;
+      let qtdAberto = 0;
+      let qtdPagas = 0;
+      let pagasTudo = 0;
+
+      for (const c of data) {
+        const valor = Number(c.valor);
+        if (c.status === "pago") {
+          pagasTudo += valor;
+          const ref = c.data_pagamento ?? c.data_vencimento;
+          if (ref >= inicio && ref <= fim) {
+            pagasMes += valor;
+            qtdPagas += 1;
+          }
+        } else if (
+          c.status === "pendente" &&
+          c.data_vencimento >= inicio &&
+          c.data_vencimento <= fim
+        ) {
+          abertoMes += valor;
+          qtdAberto += 1;
+        }
+      }
+
+      setTotalAPagarAbertoMes(abertoMes);
+      setTotalAPagarPagasMes(pagasMes);
+      setQtdAbertoMes(qtdAberto);
+      setQtdPagasMes(qtdPagas);
+      setTotalContasPagas(pagasTudo);
+    } finally {
+      setCarregandoPagar(false);
+    }
+  }, []);
+
   const fetchResumoMes = useCallback(async (mesAno: string) => {
     setCarregandoMes(true);
     try {
       const supabase = createClient();
       const { inicio, fim } = intervaloDoMes(mesAno);
 
-      const [{ data: parcelas }, { data: itens }] = await Promise.all([
-        supabase
-          .from("parcelas_vendas")
-          .select("valor_parcela, valor_pago, data_vencimento")
-          .lte("data_vencimento", fim),
-        supabase
-          .from("venda_itens")
-          .select("quantidade, preco_unitario, preco_custo, vendas!inner(data_venda)")
-          .gte("vendas.data_venda", inicio)
-          .lte("vendas.data_venda", fim),
-      ]);
+      const [{ data: parcelas }, { data: itens }, { data: pagamentos }] =
+        await Promise.all([
+          supabase
+            .from("parcelas_vendas")
+            .select("valor_parcela, valor_pago, data_vencimento")
+            .lte("data_vencimento", fim),
+          supabase
+            .from("venda_itens")
+            .select("quantidade, preco_unitario, preco_custo, vendas!inner(data_venda)")
+            .gte("vendas.data_venda", inicio)
+            .lte("vendas.data_venda", fim),
+          supabase
+            .from("pagamentos_crediario")
+            .select("valor_pago, data_pagamento")
+            .gte("data_pagamento", inicio)
+            .lte("data_pagamento", fim),
+        ]);
 
       let totalEntrar = 0;
       let qtd = 0;
@@ -198,6 +265,13 @@ export function StatsCards({
       }
       setBrutoVendasMes(bruto);
       setLucroVendasMes(lucro);
+
+      let totalRecebido = 0;
+      for (const p of pagamentos ?? []) {
+        totalRecebido += Number(p.valor_pago ?? 0);
+      }
+      setRecebidoMes(totalRecebido);
+      setQtdRecebidoMes(pagamentos?.length ?? 0);
     } finally {
       setCarregandoMes(false);
     }
@@ -214,6 +288,10 @@ export function StatsCards({
   useEffect(() => {
     void fetchResumoMes(mesFiltro);
   }, [mesFiltro, fetchResumoMes]);
+
+  useEffect(() => {
+    void fetchAPagarMes(mesFiltroPagar);
+  }, [mesFiltroPagar, fetchAPagarMes]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -267,15 +345,26 @@ export function StatsCards({
       )
       .subscribe();
 
+    const channelContas = supabase
+      .channel("dashboard-contas-pagar")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "contas_a_pagar" },
+        () => void fetchAPagarMes(mesFiltroPagar)
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channelEstoque);
       supabase.removeChannel(channelParcelas);
       supabase.removeChannel(channelPagamentos);
       supabase.removeChannel(channelVendas);
+      supabase.removeChannel(channelContas);
     };
-  }, [fetchEstoque, fetchAReceber, fetchResumoMes, mesFiltro]);
+  }, [fetchEstoque, fetchAReceber, fetchAPagarMes, fetchResumoMes, mesFiltro, mesFiltroPagar]);
 
   const mesLabel = formatMesAno(`${mesFiltro}-01`);
+  const mesLabelPagar = formatMesAno(`${mesFiltroPagar}-01`);
 
   const previstoCards: StatItem[] = [
     {
@@ -313,20 +402,18 @@ export function StatsCards({
     },
   ];
 
-  const estoqueCards: StatItem[] = [
+  const valorBrutoEstoque = stats.totalVenda;
+  // Valor bruto só desconta contas já pagas (não as em aberto).
+  const valorBrutoLiquido = valorBrutoEstoque - totalContasPagas;
+
+  const estoqueResumoCards: StatItem[] = [
     {
-      title: "Custo do estoque",
-      value: formatCurrency(stats.totalCusto),
-      description: "Investido nos produtos que ainda tem",
-      icon: Package,
-      color: "text-brand-black",
-      bg: "bg-brand-cream",
-      accent: "border-l-brand-black",
-    },
-    {
-      title: "Valor bruto, estoque",
-      value: formatCurrency(stats.totalVenda),
-      description: "Se vender o que ainda tem",
+      title: "Valor bruto",
+      value: formatCurrency(valorBrutoLiquido),
+      description:
+        totalContasPagas > 0
+          ? `Preço de venda menos contas pagas (${formatCurrency(totalContasPagas)})`
+          : "Preço de venda do estoque (ainda sem contas pagas)",
       icon: DollarSign,
       color: "text-brand-red",
       bg: "bg-brand-red/10",
@@ -336,7 +423,7 @@ export function StatsCards({
     {
       title: "Lucro do estoque",
       value: formatCurrency(stats.lucroEstimado),
-      description: "Só do que ainda tem na loja",
+      description: "Preço de venda menos preço de custo",
       icon: TrendingUp,
       color: "text-green-700",
       bg: "bg-green-50",
@@ -344,28 +431,6 @@ export function StatsCards({
       valueColor: "text-green-700",
     },
   ];
-
-  const receberCard: StatItem = {
-    title: "A receber (tudo)",
-    value: formatCurrency(totalAReceber),
-    description: "Crediário das clientes",
-    icon: Wallet,
-    color: "text-green-700",
-    bg: "bg-green-50",
-    accent: "border-l-green-600",
-    valueColor: "text-green-700",
-  };
-
-  const pagarCard: StatItem = {
-    title: "A pagar",
-    value: formatCurrency(totalAPagar),
-    description: `Contas da loja · ${formatMesAno()}`,
-    icon: Receipt,
-    color: "text-brand-red",
-    bg: "bg-brand-red/10",
-    accent: "border-l-brand-red",
-    valueColor: "text-brand-red",
-  };
 
   return (
     <div className="space-y-4">
@@ -399,27 +464,200 @@ export function StatsCards({
           ))}
         </div>
 
-        <div className="mt-2 grid gap-2 grid-cols-2">
-          <StatCard item={receberCard} isLoading={isLoading} />
-          <StatCard item={pagarCard} isLoading={isLoading} />
+        <div className="mt-2 grid gap-2 grid-cols-1 sm:grid-cols-2">
+          <Card
+            className={cn(
+              "overflow-hidden rounded-xl border-l-2 border-l-green-600 bg-gradient-to-br from-white to-brand-cream/20",
+              (isLoading || carregandoMes) && "opacity-80"
+            )}
+          >
+            <div className="space-y-2 px-2.5 py-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <div className="shrink-0 rounded-md bg-green-50 p-1">
+                  <Wallet className="h-3.5 w-3.5 text-green-700" />
+                </div>
+                <p className="truncate text-[10px] font-medium text-brand-black/55">
+                  Crediário · {mesLabel}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-brand-red/15 bg-brand-red/[0.04] px-2 py-1.5">
+                  <p className="text-[9px] font-semibold uppercase tracking-wide text-brand-red">
+                    Em aberto
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-0.5 text-sm font-bold tabular-nums text-brand-red",
+                      isLoading && "animate-pulse"
+                    )}
+                  >
+                    {formatCurrency(totalAReceber)}
+                  </p>
+                  <p className="text-[9px] text-brand-black/40">
+                    Ainda a receber
+                  </p>
+                </div>
+                <div className="rounded-lg border border-green-200 bg-green-50/70 px-2 py-1.5">
+                  <p className="text-[9px] font-semibold uppercase tracking-wide text-green-700">
+                    Recebido
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-0.5 text-sm font-bold tabular-nums text-green-700",
+                      (isLoading || carregandoMes) && "animate-pulse"
+                    )}
+                  >
+                    {formatCurrency(recebidoMes)}
+                  </p>
+                  <p className="text-[9px] text-brand-black/40">
+                    {qtdRecebidoMes === 0
+                      ? "Nada neste mês"
+                      : `${qtdRecebidoMes} pagamento${qtdRecebidoMes > 1 ? "s" : ""} no mês`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
+          <Card
+            className={cn(
+              "overflow-hidden rounded-xl border-l-2 border-l-brand-red bg-gradient-to-br from-white to-brand-cream/20",
+              (isLoading || carregandoPagar) && "opacity-80"
+            )}
+          >
+            <div className="space-y-2 px-2.5 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <div className="shrink-0 rounded-md bg-brand-red/10 p-1">
+                    <Receipt className="h-3.5 w-3.5 text-brand-red" />
+                  </div>
+                  <p className="truncate text-[10px] font-medium text-brand-black/55">
+                    A pagar · {mesLabelPagar}
+                  </p>
+                </div>
+                <Input
+                  aria-label="Filtrar a pagar por mês"
+                  type="month"
+                  value={mesFiltroPagar}
+                  onChange={(e) => setMesFiltroPagar(e.target.value)}
+                  className="h-7 w-[8.25rem] shrink-0 px-1.5 text-[10px]"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-brand-red/15 bg-brand-red/[0.04] px-2 py-1.5">
+                  <p className="text-[9px] font-semibold uppercase tracking-wide text-brand-red">
+                    Em aberto
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-0.5 text-sm font-bold tabular-nums text-brand-red",
+                      (isLoading || carregandoPagar) && "animate-pulse"
+                    )}
+                  >
+                    {formatCurrency(totalAPagarAbertoMes)}
+                  </p>
+                  <p className="text-[9px] text-brand-black/40">
+                    {qtdAbertoMes === 0
+                      ? "Nenhuma"
+                      : `${qtdAbertoMes} conta${qtdAbertoMes > 1 ? "s" : ""}`}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-green-200 bg-green-50/70 px-2 py-1.5">
+                  <p className="text-[9px] font-semibold uppercase tracking-wide text-green-700">
+                    Pagas
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-0.5 text-sm font-bold tabular-nums text-green-700",
+                      (isLoading || carregandoPagar) && "animate-pulse"
+                    )}
+                  >
+                    {formatCurrency(totalAPagarPagasMes)}
+                  </p>
+                  <p className="text-[9px] text-brand-black/40">
+                    {qtdPagasMes === 0
+                      ? "Nenhuma"
+                      : `${qtdPagasMes} conta${qtdPagasMes > 1 ? "s" : ""}`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
         </div>
 
         <p className="mt-1.5 text-[10px] leading-relaxed text-brand-black/45">
-          A receber = crediário. A pagar = contas da loja (aluguel, fornecedor…).
-          Nada disso vem do estoque.
+          Crediário: em aberto (ainda deve) e recebido no mês. A pagar: em aberto
+          e contas já pagas no mês.
         </p>
       </div>
 
       <div className="border-t border-brand-red/10 pt-3">
         <SectionLabel>Estoque atual</SectionLabel>
-        <div className="grid gap-2 grid-cols-2 lg:grid-cols-3">
-          {estoqueCards.map((item) => (
-            <StatCard key={item.title} item={item} isLoading={isLoading} />
+
+        <Card
+          className={cn(
+            "mb-2 overflow-hidden rounded-xl border border-brand-red/15 bg-gradient-to-br from-brand-cream/40 via-white to-white",
+            isLoading && "opacity-80"
+          )}
+        >
+          <div className="grid grid-cols-1 divide-y divide-brand-red/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+            <div className="px-3 py-3">
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <div className="rounded-md bg-brand-cream p-1">
+                  <Package className="h-3.5 w-3.5 text-brand-black" />
+                </div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-black/55">
+                  Preço de custo
+                </p>
+              </div>
+              <p
+                className={cn(
+                  "text-xl font-bold tabular-nums text-brand-black sm:text-2xl",
+                  isLoading && "animate-pulse"
+                )}
+              >
+                {formatCurrency(stats.totalCusto)}
+              </p>
+              <p className="mt-1 text-[10px] text-brand-black/45">
+                Quanto você pagou no que ainda tem na loja
+              </p>
+            </div>
+
+            <div className="bg-brand-red/[0.04] px-3 py-3">
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <div className="rounded-md bg-brand-red/10 p-1">
+                  <DollarSign className="h-3.5 w-3.5 text-brand-red" />
+                </div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-red">
+                  Preço de venda
+                </p>
+              </div>
+              <p
+                className={cn(
+                  "text-xl font-bold tabular-nums text-brand-red sm:text-2xl",
+                  isLoading && "animate-pulse"
+                )}
+              >
+                {formatCurrency(valorBrutoEstoque)}
+              </p>
+              <p className="mt-1 text-[10px] text-brand-black/45">
+                Se vender tudo o que ainda tem
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+          {estoqueResumoCards.map((item) => (
+            <StatCard
+              key={item.title}
+              item={item}
+              isLoading={isLoading || carregandoPagar}
+            />
           ))}
         </div>
         <p className="mt-1.5 text-[10px] leading-relaxed text-brand-black/45">
-          Só produtos que ainda tem na loja. Se zerar, fica R$0,00 — isso é
-          normal e não mexe no a pagar.
+          Valor bruto = preço de venda do estoque menos só as contas já pagas.
+          Contas em aberto não entram nesse desconto.
         </p>
       </div>
     </div>

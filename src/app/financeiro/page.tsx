@@ -12,7 +12,6 @@ export default function FinanceiroPage() {
     <FinanceiroModule
       parcelas={data?.parcelas ?? []}
       contas={data?.contas ?? []}
-      totalAPagarMes={data?.totalAPagarMes ?? 0}
     />
   );
 }

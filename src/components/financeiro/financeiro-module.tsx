@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { FileDown, Loader2, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -38,12 +38,33 @@ import { ConsultaClienteDebito } from "@/components/financeiro/consulta-cliente-
 import { SelecaoBotoes, OPCOES_PARCELAS } from "@/components/ui/selecao-botoes";
 import { InputMoeda } from "@/components/ui/input-moeda";
 import { baixarRelatorioContasPDF } from "@/lib/relatorio-contas-pagar-pdf";
+import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatDate, formatMesAno } from "@/lib/format";
 import { invalidateAfterFinanceiroChange } from "@/lib/queries/page-cache";
 import { mutationError } from "@/lib/db/helpers";
+import { cn } from "@/lib/utils";
 import type { ParcelaVenda, ContaAPagar } from "@/types/database";
 
 const LIMITE_CONTAS_PAGINA = 5;
+
+type AmostraPagar = "abertas" | "pagas";
+
+function mesAtualInput(): string {
+  const agora = new Date();
+  const y = agora.getFullYear();
+  const m = String(agora.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+function intervaloDoMes(mesAno: string): { inicio: string; fim: string } {
+  const [y, m] = mesAno.split("-").map(Number);
+  const ultimoDia = new Date(y, m, 0).getDate();
+  const mm = String(m).padStart(2, "0");
+  return {
+    inicio: `${y}-${mm}-01`,
+    fim: `${y}-${mm}-${String(ultimoDia).padStart(2, "0")}`,
+  };
+}
 
 const RELATORIOS_PAGAR: { id: PeriodoRelatorioContas; label: string }[] = [
   { id: "mes", label: "Pago do mês" },
@@ -54,29 +75,76 @@ const RELATORIOS_PAGAR: { id: PeriodoRelatorioContas; label: string }[] = [
 interface FinanceiroModuleProps {
   parcelas: (ParcelaVenda & { saldo_parcela: number })[];
   contas: ContaAPagar[];
-  totalAPagarMes: number;
 }
 
 export function FinanceiroModule({
   parcelas,
   contas: initialContas,
-  totalAPagarMes,
 }: FinanceiroModuleProps) {
   const { toast } = useAppMessages();
   const [contas, setContas] = useState(initialContas);
+  const [contasPagas, setContasPagas] = useState<ContaAPagar[]>([]);
+  const [mesFiltroPagar, setMesFiltroPagar] = useState(mesAtualInput);
+  const [amostraPagar, setAmostraPagar] = useState<AmostraPagar>("abertas");
   const [dialogContaAberto, setDialogContaAberto] = useState(false);
   const [paginaContas, setPaginaContas] = useState(1);
   const [gerandoRelatorio, setGerandoRelatorio] = useState<PeriodoRelatorioContas | null>(null);
+  const [carregandoPagas, setCarregandoPagas] = useState(false);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     setContas(initialContas);
   }, [initialContas]);
 
-  const totalPaginas = Math.max(1, Math.ceil(contas.length / LIMITE_CONTAS_PAGINA));
+  const fetchContasPagasMes = useCallback(async (mesAno: string) => {
+    setCarregandoPagas(true);
+    try {
+      const supabase = createClient();
+      const { inicio, fim } = intervaloDoMes(mesAno);
+      const { data } = await supabase
+        .from("contas_a_pagar")
+        .select("*")
+        .eq("status", "pago")
+        .order("data_pagamento", { ascending: false });
+
+      const filtradas = (data ?? []).filter((c) => {
+        const ref = c.data_pagamento ?? c.data_vencimento;
+        return ref >= inicio && ref <= fim;
+      }) as ContaAPagar[];
+
+      setContasPagas(filtradas);
+    } finally {
+      setCarregandoPagas(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchContasPagasMes(mesFiltroPagar);
+  }, [mesFiltroPagar, fetchContasPagasMes]);
+
+  const contasAbertasMes = useMemo(
+    () => contas.filter((c) => c.data_vencimento.startsWith(mesFiltroPagar)),
+    [contas, mesFiltroPagar]
+  );
+  const totalAbertoMes = useMemo(
+    () => contasAbertasMes.reduce((sum, c) => sum + Number(c.valor), 0),
+    [contasAbertasMes]
+  );
+  const totalPagasMes = useMemo(
+    () => contasPagas.reduce((sum, c) => sum + Number(c.valor), 0),
+    [contasPagas]
+  );
+  const mesLabelPagar = formatMesAno(`${mesFiltroPagar}-01`);
+
+  const listaAtual = amostraPagar === "abertas" ? contasAbertasMes : contasPagas;
+  const totalPaginas = Math.max(1, Math.ceil(listaAtual.length / LIMITE_CONTAS_PAGINA));
   const paginaAtual = Math.min(paginaContas, totalPaginas);
   const inicio = (paginaAtual - 1) * LIMITE_CONTAS_PAGINA;
-  const contasVisiveis = contas.slice(inicio, inicio + LIMITE_CONTAS_PAGINA);
+  const contasVisiveis = listaAtual.slice(inicio, inicio + LIMITE_CONTAS_PAGINA);
+
+  useEffect(() => {
+    setPaginaContas(1);
+  }, [mesFiltroPagar, amostraPagar]);
 
   useEffect(() => {
     if (paginaContas > totalPaginas) {
@@ -94,7 +162,8 @@ export function FinanceiroModule({
       }
       setContas((prev) => prev.filter((c) => c.id !== id));
       invalidateAfterFinanceiroChange();
-      toast("Conta paga. Saiu da lista.", "success");
+      void fetchContasPagasMes(mesFiltroPagar);
+      toast("Conta paga. Saiu da lista em aberto.", "success");
     });
   }
 
@@ -141,13 +210,78 @@ export function FinanceiroModule({
         <TabsContent value="pagar">
           <div className="space-y-4">
             <Card className="bg-brand-red/5 border-brand-red/20">
-              <CardContent className="pt-4 pb-4">
-                <p className="text-xs text-brand-black/60">
-                  Total a pagar em {formatMesAno()}
-                </p>
-                <p className="text-2xl font-bold text-brand-red mt-0.5">
-                  {formatCurrency(totalAPagarMes)}
-                </p>
+              <CardContent className="space-y-3 pt-4 pb-4">
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <p className="text-xs text-brand-black/60">
+                    Contas da loja · {mesLabelPagar}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor="filtro_mes_pagar"
+                      className="text-[10px] font-medium text-brand-black/55"
+                    >
+                      Mês
+                    </Label>
+                    <Input
+                      id="filtro_mes_pagar"
+                      type="month"
+                      value={mesFiltroPagar}
+                      onChange={(e) => setMesFiltroPagar(e.target.value)}
+                      className="h-8 w-[9.5rem] px-2 text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAmostraPagar("abertas")}
+                    className={cn(
+                      "rounded-xl border px-3 py-2.5 text-left transition-colors touch-manipulation",
+                      amostraPagar === "abertas"
+                        ? "border-brand-red bg-brand-red/10"
+                        : "border-brand-black/10 bg-white hover:bg-brand-cream/60"
+                    )}
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-red">
+                      Em aberto
+                    </p>
+                    <p className="mt-0.5 text-xl font-bold tabular-nums text-brand-red">
+                      {formatCurrency(totalAbertoMes)}
+                    </p>
+                    <p className="text-[10px] text-brand-black/45">
+                      {contasAbertasMes.length === 0
+                        ? "Nenhuma"
+                        : `${contasAbertasMes.length} conta${contasAbertasMes.length > 1 ? "s" : ""}`}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAmostraPagar("pagas")}
+                    className={cn(
+                      "rounded-xl border px-3 py-2.5 text-left transition-colors touch-manipulation",
+                      amostraPagar === "pagas"
+                        ? "border-green-600 bg-green-50"
+                        : "border-brand-black/10 bg-white hover:bg-brand-cream/60"
+                    )}
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-green-700">
+                      Pagas
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-0.5 text-xl font-bold tabular-nums text-green-700",
+                        carregandoPagas && "animate-pulse"
+                      )}
+                    >
+                      {formatCurrency(totalPagasMes)}
+                    </p>
+                    <p className="text-[10px] text-brand-black/45">
+                      {contasPagas.length === 0
+                        ? "Nenhuma"
+                        : `${contasPagas.length} conta${contasPagas.length > 1 ? "s" : ""}`}
+                    </p>
+                  </button>
+                </div>
               </CardContent>
             </Card>
 
@@ -176,9 +310,6 @@ export function FinanceiroModule({
                     </Button>
                   ))}
                 </div>
-                <p className="text-[10px] text-brand-black/45">
-                  Contas pagas ficam só no banco. O app mostra só as pendentes.
-                </p>
               </div>
 
               <Dialog open={dialogContaAberto} onOpenChange={setDialogContaAberto}>
@@ -214,20 +345,24 @@ export function FinanceiroModule({
                   <TableRow>
                     <TableHead className="h-8 px-2 py-1 text-[10px]">Descrição</TableHead>
                     <TableHead className="h-8 px-2 py-1 text-[10px]">Parcela</TableHead>
-                    <TableHead className="h-8 px-2 py-1 text-[10px]">Vencimento</TableHead>
+                    <TableHead className="h-8 px-2 py-1 text-[10px]">
+                      {amostraPagar === "pagas" ? "Pagamento" : "Vencimento"}
+                    </TableHead>
                     <TableHead className="h-8 px-2 py-1 text-[10px]">Valor</TableHead>
                     <TableHead className="h-8 px-2 py-1 text-[10px]">Status</TableHead>
                     <TableHead className="h-8 px-2 py-1 text-[10px] text-right">Ação</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="bg-transparent">
-                  {contas.length === 0 ? (
+                  {listaAtual.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={6}
                         className="px-2 py-6 text-center text-brand-black/50"
                       >
-                        Nenhuma conta pendente.
+                        {amostraPagar === "pagas"
+                          ? "Nenhuma conta paga neste mês."
+                          : "Nenhuma conta em aberto neste mês."}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -242,25 +377,36 @@ export function FinanceiroModule({
                             : "—"}
                         </TableCell>
                         <TableCell className="px-2 py-2 align-middle">
-                          {formatDate(c.data_vencimento)}
+                          {formatDate(
+                            amostraPagar === "pagas"
+                              ? (c.data_pagamento ?? c.data_vencimento)
+                              : c.data_vencimento
+                          )}
                         </TableCell>
                         <TableCell className="px-2 py-2 align-middle tabular-nums">
                           {formatCurrency(Number(c.valor))}
                         </TableCell>
                         <TableCell className="px-2 py-2 align-middle">
-                          <Badge variant="warning" className="text-[10px] px-1.5 py-0">
-                            Pendente
+                          <Badge
+                            variant={amostraPagar === "pagas" ? "success" : "warning"}
+                            className="text-[10px] px-1.5 py-0"
+                          >
+                            {amostraPagar === "pagas" ? "Paga" : "Em aberto"}
                           </Badge>
                         </TableCell>
                         <TableCell className="px-2 py-2 align-middle text-right">
-                          <Button
-                            size="sm"
-                            className="h-8 text-xs px-2 touch-manipulation"
-                            onClick={() => handleBaixaConta(c.id)}
-                            disabled={pending}
-                          >
-                            Dar Baixa
-                          </Button>
+                          {amostraPagar === "abertas" ? (
+                            <Button
+                              size="sm"
+                              className="h-8 text-xs px-2 touch-manipulation"
+                              onClick={() => handleBaixaConta(c.id)}
+                              disabled={pending}
+                            >
+                              Dar Baixa
+                            </Button>
+                          ) : (
+                            <span className="text-[10px] text-brand-black/40">—</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -269,7 +415,7 @@ export function FinanceiroModule({
               </Table>
             </div>
 
-            {contas.length > LIMITE_CONTAS_PAGINA && (
+            {listaAtual.length > LIMITE_CONTAS_PAGINA && (
               <ListaPaginacao
                 paginaAtual={paginaAtual}
                 totalPaginas={totalPaginas}

@@ -141,6 +141,84 @@ export async function createVenda(data: {
   }
 }
 
+export async function updateVendaStatus(
+  vendaId: string,
+  status: "pago" | "pendente"
+) {
+  try {
+    const result = await runDb(async (supabase) => {
+      if (status !== "pago" && status !== "pendente") {
+        return { error: "Situação inválida." };
+      }
+
+      const { data: venda, error: vendaErr } = await supabase
+        .from("vendas")
+        .select("id, status")
+        .eq("id", vendaId)
+        .single();
+
+      if (vendaErr || !venda) {
+        return dbError(vendaErr?.message ?? "Venda não encontrada.");
+      }
+
+      if (venda.status === status) return { success: true as const };
+
+      const { error: upVenda } = await supabase
+        .from("vendas")
+        .update({ status })
+        .eq("id", vendaId);
+
+      if (upVenda) return dbError(upVenda.message);
+
+      const { data: parcelas, error: parcErr } = await supabase
+        .from("parcelas_vendas")
+        .select("id, valor_parcela")
+        .eq("venda_id", vendaId);
+
+      if (parcErr) return dbError(parcErr.message);
+
+      if (status === "pago") {
+        for (const p of parcelas ?? []) {
+          const { error } = await supabase
+            .from("parcelas_vendas")
+            .update({
+              status: "pago",
+              valor_pago: Number(p.valor_parcela),
+            })
+            .eq("id", p.id);
+          if (error) return dbError(error.message);
+        }
+      } else {
+        const { error: delPag } = await supabase
+          .from("pagamentos_crediario")
+          .delete()
+          .eq("venda_id", vendaId);
+        if (delPag) return dbError(delPag.message);
+
+        for (const p of parcelas ?? []) {
+          const { error } = await supabase
+            .from("parcelas_vendas")
+            .update({
+              status: "pendente",
+              valor_pago: 0,
+            })
+            .eq("id", p.id);
+          if (error) return dbError(error.message);
+        }
+      }
+
+      return { success: true as const };
+    });
+
+    if ("success" in result && result.success) {
+      invalidateAfterVendasChange();
+    }
+    return result;
+  } catch (err) {
+    return mapDbError(err);
+  }
+}
+
 export async function getUltimaVendaComprovante(
   clienteId: string
 ): Promise<{ comprovante: ComprovanteVendaData } | { error: string }> {

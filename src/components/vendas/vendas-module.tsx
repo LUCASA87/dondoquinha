@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useRef } from "react";
-import { Plus, Minus, ShoppingBag } from "lucide-react";
+import { Plus, Minus, Pencil, ShoppingBag } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,16 +24,25 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ComprovanteVenda } from "@/components/vendas/comprovante-venda";
 import { SelecaoBotoes, OPCOES_PARCELAS } from "@/components/ui/selecao-botoes";
 import { InputMoeda } from "@/components/ui/input-moeda";
-import { createVenda } from "@/lib/mutations/vendas";
+import { useAppMessages } from "@/components/ui/app-messages";
+import { createVenda, updateVendaStatus } from "@/lib/mutations/vendas";
 import { mutationError } from "@/lib/db/helpers";
 import { formatCurrency, formatDate, formatItemNome, formatItemNomeInput } from "@/lib/format";
 import { nomeClienteDaVenda } from "@/lib/cliente-venda-nome";
 import { datasAPartirDaPrimeira, datasPadraoParcelas, validarDatasParcelas } from "@/lib/parcelas-datas";
 import { validateProdutoNome } from "@/lib/validate";
-import type { Cliente, Produto, Venda } from "@/types/database";
+import { cn } from "@/lib/utils";
+import type { Cliente, Produto, StatusPagamento, Venda } from "@/types/database";
 import type { ComprovanteVendaData } from "@/lib/store";
 
 interface VendasModuleProps {
@@ -68,6 +77,7 @@ function labelProdutoSelecionado(p: Produto) {
 }
 
 export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasModuleProps) {
+  const { toast } = useAppMessages();
   const [clienteId, setClienteId] = useState("");
   const [parcelas, setParcelas] = useState(1);
   const [datasVencimento, setDatasVencimento] = useState<string[]>(() =>
@@ -84,9 +94,31 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
   const [comprovante, setComprovante] = useState<ComprovanteVendaData | null>(null);
   const [telefoneComprovante, setTelefoneComprovante] = useState<string | null>(null);
   const [showComprovante, setShowComprovante] = useState(false);
+  const [vendaSituacao, setVendaSituacao] = useState<Venda | null>(null);
+  const [statusEdit, setStatusEdit] = useState<StatusPagamento>("pendente");
   const [pending, startTransition] = useTransition();
   const carrinhoRef = useRef<HTMLDivElement>(null);
   const scrollAposAdicionar = useRef(false);
+
+  function abrirEditarSituacao(venda: Venda) {
+    setVendaSituacao(venda);
+    setStatusEdit(venda.status);
+  }
+
+  function salvarSituacao() {
+    if (!vendaSituacao) return;
+    startTransition(async () => {
+      const result = await updateVendaStatus(vendaSituacao.id, statusEdit);
+      const err = mutationError(result);
+      if (err) {
+        toast(err, "error");
+        return;
+      }
+      setVendaSituacao(null);
+      await onRefresh();
+      toast("Situação da compra atualizada.", "success");
+    });
+  }
 
   const produtoAtual = produtos.find((p) => p.id === produtoSelecionado);
 
@@ -578,7 +610,9 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
         <h2 className="text-xl font-semibold text-brand-black mb-4">
           Vendas Recentes
         </h2>
-        <p className="mb-4 text-sm text-brand-black/50">Últimas 5 vendas registradas.</p>
+        <p className="mb-4 text-sm text-brand-black/50">
+          Últimas 5 vendas. Toque no lápis para ajustar a situação se errou.
+        </p>
         {vendas.length === 0 ? (
           <p className="text-brand-black/50">Nenhuma venda registrada.</p>
         ) : (
@@ -590,6 +624,7 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
                 <TableHead>Parcelas</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
+                <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -606,12 +641,92 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
                   <TableCell className="text-right font-medium">
                     {formatCurrency(Number(v.valor_total))}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Editar situação"
+                      onClick={() => abrirEditarSituacao(v)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
       </div>
+
+      <Dialog
+        open={!!vendaSituacao}
+        onOpenChange={(open) => {
+          if (!open) setVendaSituacao(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar situação</DialogTitle>
+            <DialogDescription>
+              {vendaSituacao
+                ? `${nomeClienteDaVenda(vendaSituacao)} · ${formatCurrency(Number(vendaSituacao.valor_total))}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Situação da compra</Label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { value: "pendente" as const, label: "Em aberto" },
+                    { value: "pago" as const, label: "Quitado" },
+                  ] as const
+                ).map((opcao) => {
+                  const selecionado = statusEdit === opcao.value;
+                  return (
+                    <button
+                      key={opcao.value}
+                      type="button"
+                      onClick={() => setStatusEdit(opcao.value)}
+                      className={cn(
+                        "min-w-[7rem] rounded-lg px-4 py-2.5 text-base font-medium transition-colors",
+                        selecionado
+                          ? "bg-brand-red text-white shadow-sm"
+                          : "border border-brand-black/15 bg-white text-brand-black/70 hover:bg-brand-cream hover:text-brand-black"
+                      )}
+                    >
+                      {opcao.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <p className="text-sm text-brand-black/55">
+              Quitado marca todas as parcelas como pagas. Em aberto volta o
+              crediário para cobrança e apaga os pagamentos dessa compra.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setVendaSituacao(null)}
+                disabled={pending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={salvarSituacao}
+                disabled={pending || !vendaSituacao || statusEdit === vendaSituacao.status}
+              >
+                {pending ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       </>
       )}
     </div>
