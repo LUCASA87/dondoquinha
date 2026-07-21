@@ -30,6 +30,7 @@ import { InputMoeda } from "@/components/ui/input-moeda";
 import { createVenda } from "@/lib/mutations/vendas";
 import { mutationError } from "@/lib/db/helpers";
 import { formatCurrency, formatDate, formatItemNome, formatItemNomeInput } from "@/lib/format";
+import { datasPadraoParcelas, validarDatasParcelas } from "@/lib/parcelas-datas";
 import { validateProdutoNome } from "@/lib/validate";
 import type { Cliente, Produto, Venda } from "@/types/database";
 import type { ComprovanteVendaData } from "@/lib/store";
@@ -68,6 +69,9 @@ function labelProdutoSelecionado(p: Produto) {
 export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasModuleProps) {
   const [clienteId, setClienteId] = useState("");
   const [parcelas, setParcelas] = useState(1);
+  const [datasVencimento, setDatasVencimento] = useState<string[]>(() =>
+    datasPadraoParcelas(1)
+  );
   const [obs, setObs] = useState("");
   const [carrinho, setCarrinho] = useState<CarrinhoItem[]>([]);
   const [produtoSelecionado, setProdutoSelecionado] = useState("");
@@ -233,7 +237,28 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
       .filter(Boolean) as CarrinhoItem[];
 
     setCarrinho(novoCarrinho);
-    if (novoCarrinho.length === 0) setParcelas(1);
+    if (novoCarrinho.length === 0) {
+      setParcelas(1);
+      setDatasVencimento(datasPadraoParcelas(1));
+    }
+  }
+
+  function alterarNumeroParcelas(n: number) {
+    setParcelas(n);
+    setDatasVencimento((prev) => {
+      if (n === prev.length) return prev;
+      if (n < prev.length) return prev.slice(0, n);
+      const extras = datasPadraoParcelas(n).slice(prev.length);
+      return [...prev, ...extras];
+    });
+  }
+
+  function alterarDataParcela(index: number, valor: string) {
+    setDatasVencimento((prev) => {
+      const next = [...prev];
+      next[index] = valor;
+      return next;
+    });
   }
 
   function finalizarVenda() {
@@ -246,11 +271,18 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
       return;
     }
 
+    const datasOk = validarDatasParcelas(parcelas, datasVencimento);
+    if (!datasOk.ok) {
+      setError(datasOk.error);
+      return;
+    }
+
     setError(null);
     startTransition(async () => {
       const result = await createVenda({
         cliente_id: clienteId,
         parcelas,
+        datas_vencimento: datasOk.datas,
         obs: obs.trim() || undefined,
         itens: carrinho.map((c) => ({
           produto_id: c.produto_id,
@@ -274,6 +306,7 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
         setCarrinho([]);
         setClienteId("");
         setParcelas(1);
+        setDatasVencimento(datasPadraoParcelas(1));
         setObs("");
         setNomeManual("");
         setCustoManual(0);
@@ -477,12 +510,37 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
                 label="Número de Parcelas"
                 opcoes={OPCOES_PARCELAS}
                 value={parcelas}
-                onChange={setParcelas}
+                onChange={alterarNumeroParcelas}
               />
               {parcelas > 0 && (
-                <p className="text-sm text-brand-black/60 -mt-2">
-                  {parcelas}x de {formatCurrency(total / parcelas)} (vencimentos a cada 30 dias)
-                </p>
+                <div className="space-y-3 -mt-1">
+                  <p className="text-sm text-brand-black/60">
+                    {parcelas}x de {formatCurrency(total / parcelas)}. Ajuste a
+                    data de cada parcela se quiser (sugestão: a cada 30 dias).
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {datasVencimento.map((data, index) => (
+                      <div key={`parcela-data-${index}`} className="space-y-1.5">
+                        <Label
+                          htmlFor={`data_parcela_${index + 1}`}
+                          className="text-xs text-brand-black/70"
+                        >
+                          {index + 1}ª parcela —{" "}
+                          {formatCurrency(total / parcelas)}
+                        </Label>
+                        <Input
+                          id={`data_parcela_${index + 1}`}
+                          type="date"
+                          value={data}
+                          onChange={(e) =>
+                            alterarDataParcela(index, e.target.value)
+                          }
+                          className="h-11"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
 
               <div className="space-y-2">

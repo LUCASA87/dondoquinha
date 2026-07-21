@@ -2,6 +2,7 @@ import { montarComprovanteVenda } from "@/lib/comprovante-venda-data";
 import { runDb, mapDbError, dbError } from "@/lib/db/helpers";
 import { baixarEstoqueVenda, validarEstoqueVenda } from "@/lib/db/estoque-venda";
 import { formatItemNome } from "@/lib/format";
+import { validarDatasParcelas } from "@/lib/parcelas-datas";
 import { invalidateAfterVendasChange } from "@/lib/queries/page-cache";
 import type { ComprovanteVendaData } from "@/lib/store";
 
@@ -16,6 +17,7 @@ interface ItemVenda {
 export async function createVenda(data: {
   cliente_id: string;
   parcelas: number;
+  datas_vencimento?: string[];
   obs?: string;
   itens: ItemVenda[];
 }) {
@@ -30,6 +32,8 @@ export async function createVenda(data: {
     );
 
     const parcelas = Math.max(1, data.parcelas);
+    const datasOk = validarDatasParcelas(parcelas, data.datas_vencimento);
+    if (!datasOk.ok) return { error: datasOk.error };
 
     const { data: venda, error: vendaError } = await supabase
       .from("vendas")
@@ -77,12 +81,9 @@ export async function createVenda(data: {
     const valorParcela = Math.round((valor_total / parcelas) * 100) / 100;
     const parcelasComprovante: ComprovanteVendaData["parcelas"] = [];
     const parcelasInsert = [];
-    const hoje = new Date();
 
     for (let i = 1; i <= parcelas; i++) {
-      const vencimento = new Date(hoje);
-      vencimento.setDate(vencimento.getDate() + 30 * i);
-      const dataVenc = vencimento.toISOString().split("T")[0];
+      const dataVenc = datasOk.datas[i - 1];
 
       parcelasInsert.push({
         venda_id: venda.id,
