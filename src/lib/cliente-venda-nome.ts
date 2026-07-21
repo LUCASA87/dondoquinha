@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 /** Nome da cliente na venda: cadastro atual ou nome guardado após exclusão. */
 export function nomeClienteDaVenda(venda?: {
   cliente_nome?: string | null;
@@ -8,4 +10,28 @@ export function nomeClienteDaVenda(venda?: {
   const guardado = venda?.cliente_nome?.trim();
   if (guardado) return guardado;
   return "—";
+}
+
+/** Select de parcelas com cliente_nome; se a coluna ainda não existir, tenta sem ela. */
+export async function selectParcelasAbertasComCliente(
+  supabase: SupabaseClient
+) {
+  const comNome =
+    "id, venda_id, numero_parcela, valor_parcela, valor_pago, data_vencimento, status, vendas(id, valor_total, parcelas, cliente_nome, clientes(nome))";
+  const semNome =
+    "id, venda_id, numero_parcela, valor_parcela, valor_pago, data_vencimento, status, vendas(id, valor_total, parcelas, clientes(nome))";
+
+  const primeiro = await supabase
+    .from("parcelas_vendas")
+    .select(comNome)
+    .eq("status", "pendente")
+    .order("data_vencimento");
+
+  if (!primeiro.error) return primeiro;
+
+  return supabase
+    .from("parcelas_vendas")
+    .select(semNome)
+    .eq("status", "pendente")
+    .order("data_vencimento");
 }

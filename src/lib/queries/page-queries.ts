@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { selectParcelasAbertasComCliente } from "@/lib/cliente-venda-nome";
 import { filtrarParcelasPagaveis } from "@/lib/parcelas-utils";
 import { agruparNomesItensPorVenda, buscarItensVendas } from "@/lib/venda-itens";
 import type {
@@ -155,15 +156,9 @@ export async function queryParcelasAVencer(
 export async function queryParcelasAbertas(
   supabase: SupabaseClient
 ): Promise<(ParcelaVenda & { saldo_parcela: number })[]> {
-  const { data, error } = await supabase
-    .from("parcelas_vendas")
-    .select(
-      "id, venda_id, numero_parcela, valor_parcela, valor_pago, data_vencimento, status, vendas(id, valor_total, parcelas, cliente_nome, clientes(nome))"
-    )
-    .eq("status", "pendente")
-    .order("data_vencimento");
+  const { data, error } = await selectParcelasAbertasComCliente(supabase);
 
-  if (error) return [];
+  if (error || !data) return [];
 
   return data
     .map((p) => ({
@@ -192,14 +187,25 @@ export async function queryVendas(
   supabase: SupabaseClient,
   limit = 5
 ): Promise<(Venda & { clientes: { nome: string } | null })[]> {
-  const { data, error } = await supabase
+  const comNome =
+    "id, cliente_id, cliente_nome, valor_total, forma_pagamento, parcelas, status, obs, data_venda, created_at, clientes(nome)";
+  const semNome =
+    "id, cliente_id, valor_total, forma_pagamento, parcelas, status, obs, data_venda, created_at, clientes(nome)";
+
+  let { data, error } = await supabase
     .from("vendas")
-    .select(
-      "id, cliente_id, cliente_nome, valor_total, forma_pagamento, parcelas, status, obs, data_venda, created_at, clientes(nome)"
-    )
+    .select(comNome)
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (error) return [];
+  if (error) {
+    ({ data, error } = await supabase
+      .from("vendas")
+      .select(semNome)
+      .order("created_at", { ascending: false })
+      .limit(limit));
+  }
+
+  if (error || !data) return [];
   return data as unknown as (Venda & { clientes: { nome: string } | null })[];
 }

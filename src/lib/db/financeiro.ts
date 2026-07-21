@@ -11,7 +11,10 @@ import {
   mapItensComprovante,
 } from "@/lib/venda-itens";
 import { formatCPF } from "@/lib/format";
-import { nomeClienteDaVenda } from "@/lib/cliente-venda-nome";
+import {
+  nomeClienteDaVenda,
+  selectParcelasAbertasComCliente,
+} from "@/lib/cliente-venda-nome";
 
 async function getTotalPagoVenda(supabase: SupabaseClient, vendaId: string) {
   const { data } = await supabase
@@ -163,15 +166,9 @@ export async function getParcelasAbertas(): Promise<
 > {
   const supabase = await db();
 
-  const { data, error } = await supabase
-    .from("parcelas_vendas")
-    .select(
-      "id, venda_id, numero_parcela, valor_parcela, valor_pago, data_vencimento, status, vendas(id, valor_total, parcelas, cliente_nome, clientes(nome))"
-    )
-    .eq("status", "pendente")
-    .order("data_vencimento");
+  const { data, error } = await selectParcelasAbertasComCliente(supabase);
 
-  if (error) return [];
+  if (error || !data) return [];
 
   return data
     .map((p) => ({
