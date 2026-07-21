@@ -8,9 +8,12 @@ import {
   DollarSign,
   Receipt,
   Wallet,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatMesAno } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -33,6 +36,23 @@ interface StatItem {
   accent: string;
   valueColor?: string;
   href?: string;
+}
+
+function mesAtualInput(): string {
+  const agora = new Date();
+  const y = agora.getFullYear();
+  const m = String(agora.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+function intervaloDoMes(mesAno: string): { inicio: string; fim: string } {
+  const [y, m] = mesAno.split("-").map(Number);
+  const ultimoDia = new Date(y, m, 0).getDate();
+  const mm = String(m).padStart(2, "0");
+  return {
+    inicio: `${y}-${mm}-01`,
+    fim: `${y}-${mm}-${String(ultimoDia).padStart(2, "0")}`,
+  };
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -73,6 +93,11 @@ function StatCard({ item, isLoading }: { item: StatItem; isLoading?: boolean }) 
           >
             {item.value}
           </p>
+          {item.description ? (
+            <p className="text-[9px] text-brand-black/40 leading-tight mt-0.5 truncate">
+              {item.description}
+            </p>
+          ) : null}
         </div>
       </div>
     </Card>
@@ -97,6 +122,10 @@ export function StatsCards({
 }: StatsCardsProps) {
   const [stats, setStats] = useState(initialStats);
   const [totalAReceber, setTotalAReceber] = useState(initialAReceber);
+  const [mesFiltro, setMesFiltro] = useState(mesAtualInput);
+  const [aEntrarMes, setAEntrarMes] = useState(0);
+  const [qtdParcelasMes, setQtdParcelasMes] = useState(0);
+  const [carregandoMes, setCarregandoMes] = useState(false);
 
   const fetchEstoque = useCallback(async () => {
     const supabase = createClient();
@@ -138,6 +167,40 @@ export function StatsCards({
     setTotalAReceber(total);
   }, []);
 
+  const fetchAEntrarMes = useCallback(async (mesAno: string) => {
+    setCarregandoMes(true);
+    try {
+      const supabase = createClient();
+      const { inicio, fim } = intervaloDoMes(mesAno);
+      const { data } = await supabase
+        .from("parcelas_vendas")
+        .select("valor_parcela, valor_pago")
+        .eq("status", "pendente")
+        .gte("data_vencimento", inicio)
+        .lte("data_vencimento", fim);
+
+      if (!data) {
+        setAEntrarMes(0);
+        setQtdParcelasMes(0);
+        return;
+      }
+
+      let total = 0;
+      let qtd = 0;
+      for (const p of data) {
+        const saldo = Number(p.valor_parcela) - Number(p.valor_pago ?? 0);
+        if (saldo > 0.001) {
+          total += saldo;
+          qtd += 1;
+        }
+      }
+      setAEntrarMes(total);
+      setQtdParcelasMes(qtd);
+    } finally {
+      setCarregandoMes(false);
+    }
+  }, []);
+
   useEffect(() => {
     setStats(initialStats);
   }, [initialStats]);
@@ -145,6 +208,10 @@ export function StatsCards({
   useEffect(() => {
     setTotalAReceber(initialAReceber);
   }, [initialAReceber]);
+
+  useEffect(() => {
+    void fetchAEntrarMes(mesFiltro);
+  }, [mesFiltro, fetchAEntrarMes]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -163,7 +230,10 @@ export function StatsCards({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "parcelas_vendas" },
-        () => fetchAReceber()
+        () => {
+          fetchAReceber();
+          void fetchAEntrarMes(mesFiltro);
+        }
       )
       .subscribe();
 
@@ -172,7 +242,10 @@ export function StatsCards({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "pagamentos_crediario" },
-        () => fetchAReceber()
+        () => {
+          fetchAReceber();
+          void fetchAEntrarMes(mesFiltro);
+        }
       )
       .subscribe();
 
@@ -181,7 +254,7 @@ export function StatsCards({
       supabase.removeChannel(channelParcelas);
       supabase.removeChannel(channelPagamentos);
     };
-  }, [fetchEstoque, fetchAReceber]);
+  }, [fetchEstoque, fetchAReceber, fetchAEntrarMes, mesFiltro]);
 
   const estoqueCards: StatItem[] = [
     {
@@ -194,9 +267,9 @@ export function StatsCards({
       accent: "border-l-brand-black",
     },
     {
-      title: "Valor bruto, venda",
+      title: "Valor bruto, estoque",
       value: formatCurrency(stats.totalVenda),
-      description: "Se vender tudo",
+      description: "Se vender o estoque atual",
       icon: DollarSign,
       color: "text-brand-red",
       bg: "bg-brand-red/10",
@@ -204,9 +277,9 @@ export function StatsCards({
       valueColor: "text-brand-red",
     },
     {
-      title: "Lucro estimado",
+      title: "Lucro do estoque",
       value: formatCurrency(stats.lucroEstimado),
-      description: "Venda menos custo",
+      description: "Venda menos custo do estoque",
       icon: TrendingUp,
       color: "text-green-700",
       bg: "bg-green-50",
@@ -215,8 +288,23 @@ export function StatsCards({
     },
   ];
 
+  const aEntrarCard: StatItem = {
+    title: `A entrar em ${formatMesAno(`${mesFiltro}-01`)}`,
+    value: formatCurrency(aEntrarMes),
+    description:
+      qtdParcelasMes === 0
+        ? "Nenhuma parcela neste mês"
+        : `${qtdParcelasMes} parcela${qtdParcelasMes > 1 ? "s" : ""} do crediário`,
+    icon: CalendarDays,
+    color: "text-green-700",
+    bg: "bg-green-50",
+    accent: "border-l-green-600",
+    valueColor: "text-green-700",
+    href: "/financeiro",
+  };
+
   const receberCard: StatItem = {
-    title: "A receber",
+    title: "A receber (tudo)",
     value: formatCurrency(totalAReceber),
     description: "Crediário em aberto",
     icon: Wallet,
@@ -242,12 +330,42 @@ export function StatsCards({
   return (
     <div className="space-y-3">
       <div>
+        <div className="mb-1.5 flex flex-wrap items-end justify-between gap-2">
+          <SectionLabel>Previsto no mês</SectionLabel>
+          <div className="flex items-center gap-2">
+            <Label
+              htmlFor="filtro_mes_entrar"
+              className="text-[10px] font-medium text-brand-black/55"
+            >
+              Mês
+            </Label>
+            <Input
+              id="filtro_mes_entrar"
+              type="month"
+              value={mesFiltro}
+              onChange={(e) => setMesFiltro(e.target.value)}
+              className="h-8 w-[9.5rem] px-2 text-xs"
+            />
+          </div>
+        </div>
+        <StatCard item={aEntrarCard} isLoading={isLoading || carregandoMes} />
+        <p className="mt-1.5 text-[10px] leading-relaxed text-brand-black/45">
+          Soma das parcelas do crediário com vencimento no mês escolhido — não
+          depende do estoque.
+        </p>
+      </div>
+
+      <div>
         <SectionLabel>Estoque</SectionLabel>
         <div className="grid gap-2 grid-cols-2 lg:grid-cols-3">
           {estoqueCards.map((item) => (
             <StatCard key={item.title} item={item} isLoading={isLoading} />
           ))}
         </div>
+        <p className="mt-1.5 text-[10px] leading-relaxed text-brand-black/45">
+          Valores do estoque atual. Se zerar os produtos, estes números ficam
+          R$0,00.
+        </p>
       </div>
 
       <div className="grid gap-2 grid-cols-2">
