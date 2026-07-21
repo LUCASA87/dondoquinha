@@ -348,7 +348,7 @@ export function StatsCards({
   const receberCard: StatItem = {
     title: "A receber (tudo)",
     value: formatCurrency(totalAReceber),
-    description: "Crediário em aberto",
+    description: "Crediário das clientes",
     icon: Wallet,
     color: "text-green-700",
     bg: "bg-green-50",
@@ -359,7 +359,7 @@ export function StatsCards({
   const pagarCard: StatItem = {
     title: "A pagar",
     value: formatCurrency(totalAPagar),
-    description: `Contas de ${formatMesAno()}`,
+    description: `Contas da loja · ${formatMesAno()}`,
     icon: Receipt,
     color: "text-brand-red",
     bg: "bg-brand-red/10",
@@ -368,10 +368,10 @@ export function StatsCards({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div>
         <div className="mb-1.5 flex flex-wrap items-end justify-between gap-2">
-          <SectionLabel>Previsto no mês</SectionLabel>
+          <SectionLabel>Financeiro</SectionLabel>
           <div className="flex items-center gap-2">
             <Label
               htmlFor="filtro_mes_entrar"
@@ -388,6 +388,7 @@ export function StatsCards({
             />
           </div>
         </div>
+
         <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
           {previstoCards.map((item) => (
             <StatCard
@@ -397,13 +398,19 @@ export function StatsCards({
             />
           ))}
         </div>
+
+        <div className="mt-2 grid gap-2 grid-cols-2">
+          <StatCard item={receberCard} isLoading={isLoading} />
+          <StatCard item={pagarCard} isLoading={isLoading} />
+        </div>
+
         <p className="mt-1.5 text-[10px] leading-relaxed text-brand-black/45">
-          Use o filtro de mês. “A entrar” soma parcelas do mês e as atrasadas.
-          “Lucro” vem das vendas feitas no mês — não depende do estoque atual.
+          A receber = crediário. A pagar = contas da loja (aluguel, fornecedor…).
+          Nada disso vem do estoque.
         </p>
       </div>
 
-      <div>
+      <div className="border-t border-brand-red/10 pt-3">
         <SectionLabel>Estoque atual</SectionLabel>
         <div className="grid gap-2 grid-cols-2 lg:grid-cols-3">
           {estoqueCards.map((item) => (
@@ -411,20 +418,9 @@ export function StatsCards({
           ))}
         </div>
         <p className="mt-1.5 text-[10px] leading-relaxed text-brand-black/45">
-          Só o que ainda tem na loja. Se o estoque zerar, estes três ficam
-          R$0,00 — isso é normal.
+          Só produtos que ainda tem na loja. Se zerar, fica R$0,00 — isso é
+          normal e não mexe no a pagar.
         </p>
-      </div>
-
-      <div className="grid gap-2 grid-cols-2">
-        <div>
-          <SectionLabel>A receber</SectionLabel>
-          <StatCard item={receberCard} isLoading={isLoading} />
-        </div>
-        <div>
-          <SectionLabel>A pagar</SectionLabel>
-          <StatCard item={pagarCard} isLoading={isLoading} />
-        </div>
       </div>
     </div>
   );
