@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
 import {
   Package,
   TrendingUp,
@@ -35,7 +34,6 @@ interface StatItem {
   bg: string;
   accent: string;
   valueColor?: string;
-  href?: string;
 }
 
 function mesAtualInput(): string {
@@ -67,12 +65,11 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function StatCard({ item, isLoading }: { item: StatItem; isLoading?: boolean }) {
-  const content = (
+  return (
     <Card
       className={cn(
-        "overflow-hidden rounded-xl border-l-2 bg-gradient-to-br from-white to-brand-cream/20 transition-shadow",
+        "overflow-hidden rounded-xl border-l-2 bg-gradient-to-br from-white to-brand-cream/20",
         item.accent,
-        item.href && "hover:shadow-sm hover:shadow-brand-red/10",
         isLoading && "opacity-80"
       )}
     >
@@ -102,16 +99,6 @@ function StatCard({ item, isLoading }: { item: StatItem; isLoading?: boolean }) 
       </div>
     </Card>
   );
-
-  if (item.href) {
-    return (
-      <Link href={item.href} className="block h-full">
-        {content}
-      </Link>
-    );
-  }
-
-  return content;
 }
 
 export function StatsCards({
@@ -125,6 +112,8 @@ export function StatsCards({
   const [mesFiltro, setMesFiltro] = useState(mesAtualInput);
   const [aEntrarMes, setAEntrarMes] = useState(0);
   const [qtdParcelasMes, setQtdParcelasMes] = useState(0);
+  const [brutoVendasMes, setBrutoVendasMes] = useState(0);
+  const [lucroVendasMes, setLucroVendasMes] = useState(0);
   const [carregandoMes, setCarregandoMes] = useState(false);
 
   const fetchEstoque = useCallback(async () => {
@@ -154,8 +143,7 @@ export function StatsCards({
     const supabase = createClient();
     const { data } = await supabase
       .from("parcelas_vendas")
-      .select("valor_parcela, valor_pago")
-      .eq("status", "pendente");
+      .select("valor_parcela, valor_pago");
 
     if (!data) return;
 
@@ -167,35 +155,49 @@ export function StatsCards({
     setTotalAReceber(total);
   }, []);
 
-  const fetchAEntrarMes = useCallback(async (mesAno: string) => {
+  const fetchResumoMes = useCallback(async (mesAno: string) => {
     setCarregandoMes(true);
     try {
       const supabase = createClient();
       const { inicio, fim } = intervaloDoMes(mesAno);
-      const { data } = await supabase
-        .from("parcelas_vendas")
-        .select("valor_parcela, valor_pago")
-        .eq("status", "pendente")
-        .gte("data_vencimento", inicio)
-        .lte("data_vencimento", fim);
 
-      if (!data) {
-        setAEntrarMes(0);
-        setQtdParcelasMes(0);
-        return;
-      }
+      const [{ data: parcelas }, { data: itens }] = await Promise.all([
+        supabase
+          .from("parcelas_vendas")
+          .select("valor_parcela, valor_pago, data_vencimento")
+          .lte("data_vencimento", fim),
+        supabase
+          .from("venda_itens")
+          .select("quantidade, preco_unitario, preco_custo, vendas!inner(data_venda)")
+          .gte("vendas.data_venda", inicio)
+          .lte("vendas.data_venda", fim),
+      ]);
 
-      let total = 0;
+      let totalEntrar = 0;
       let qtd = 0;
-      for (const p of data) {
+      for (const p of parcelas ?? []) {
         const saldo = Number(p.valor_parcela) - Number(p.valor_pago ?? 0);
-        if (saldo > 0.001) {
-          total += saldo;
+        if (saldo <= 0.001) continue;
+        // No mês: vence no mês OU já está atrasada (venceu antes)
+        if (p.data_vencimento <= fim) {
+          totalEntrar += saldo;
           qtd += 1;
         }
       }
-      setAEntrarMes(total);
+      setAEntrarMes(totalEntrar);
       setQtdParcelasMes(qtd);
+
+      let bruto = 0;
+      let lucro = 0;
+      for (const item of itens ?? []) {
+        const q = Number(item.quantidade);
+        const venda = Number(item.preco_unitario) * q;
+        const custo = Number(item.preco_custo ?? 0) * q;
+        bruto += venda;
+        lucro += venda - custo;
+      }
+      setBrutoVendasMes(bruto);
+      setLucroVendasMes(lucro);
     } finally {
       setCarregandoMes(false);
     }
@@ -210,11 +212,13 @@ export function StatsCards({
   }, [initialAReceber]);
 
   useEffect(() => {
-    void fetchAEntrarMes(mesFiltro);
-  }, [mesFiltro, fetchAEntrarMes]);
+    void fetchResumoMes(mesFiltro);
+  }, [mesFiltro, fetchResumoMes]);
 
   useEffect(() => {
     const supabase = createClient();
+
+    const refreshMes = () => void fetchResumoMes(mesFiltro);
 
     const channelEstoque = supabase
       .channel("dashboard-produtos")
@@ -232,7 +236,7 @@ export function StatsCards({
         { event: "*", schema: "public", table: "parcelas_vendas" },
         () => {
           fetchAReceber();
-          void fetchAEntrarMes(mesFiltro);
+          refreshMes();
         }
       )
       .subscribe();
@@ -244,8 +248,22 @@ export function StatsCards({
         { event: "*", schema: "public", table: "pagamentos_crediario" },
         () => {
           fetchAReceber();
-          void fetchAEntrarMes(mesFiltro);
+          refreshMes();
         }
+      )
+      .subscribe();
+
+    const channelVendas = supabase
+      .channel("dashboard-vendas-itens")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "venda_itens" },
+        refreshMes
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "vendas" },
+        refreshMes
       )
       .subscribe();
 
@@ -253,14 +271,53 @@ export function StatsCards({
       supabase.removeChannel(channelEstoque);
       supabase.removeChannel(channelParcelas);
       supabase.removeChannel(channelPagamentos);
+      supabase.removeChannel(channelVendas);
     };
-  }, [fetchEstoque, fetchAReceber, fetchAEntrarMes, mesFiltro]);
+  }, [fetchEstoque, fetchAReceber, fetchResumoMes, mesFiltro]);
+
+  const mesLabel = formatMesAno(`${mesFiltro}-01`);
+
+  const previstoCards: StatItem[] = [
+    {
+      title: `A entrar até ${mesLabel}`,
+      value: formatCurrency(aEntrarMes),
+      description:
+        qtdParcelasMes === 0
+          ? "Nenhuma parcela em aberto até este mês"
+          : `${qtdParcelasMes} parcela${qtdParcelasMes > 1 ? "s" : ""} (mês + atrasadas)`,
+      icon: CalendarDays,
+      color: "text-green-700",
+      bg: "bg-green-50",
+      accent: "border-l-green-600",
+      valueColor: "text-green-700",
+    },
+    {
+      title: `Vendas em ${mesLabel}`,
+      value: formatCurrency(brutoVendasMes),
+      description: "Total vendido no mês",
+      icon: DollarSign,
+      color: "text-brand-red",
+      bg: "bg-brand-red/10",
+      accent: "border-l-brand-red",
+      valueColor: "text-brand-red",
+    },
+    {
+      title: `Lucro em ${mesLabel}`,
+      value: formatCurrency(lucroVendasMes),
+      description: "Venda menos custo das vendas do mês",
+      icon: TrendingUp,
+      color: "text-green-700",
+      bg: "bg-green-50",
+      accent: "border-l-green-600",
+      valueColor: "text-green-700",
+    },
+  ];
 
   const estoqueCards: StatItem[] = [
     {
       title: "Custo do estoque",
       value: formatCurrency(stats.totalCusto),
-      description: "Investido em produtos",
+      description: "Investido nos produtos que ainda tem",
       icon: Package,
       color: "text-brand-black",
       bg: "bg-brand-cream",
@@ -269,7 +326,7 @@ export function StatsCards({
     {
       title: "Valor bruto, estoque",
       value: formatCurrency(stats.totalVenda),
-      description: "Se vender o estoque atual",
+      description: "Se vender o que ainda tem",
       icon: DollarSign,
       color: "text-brand-red",
       bg: "bg-brand-red/10",
@@ -279,7 +336,7 @@ export function StatsCards({
     {
       title: "Lucro do estoque",
       value: formatCurrency(stats.lucroEstimado),
-      description: "Venda menos custo do estoque",
+      description: "Só do que ainda tem na loja",
       icon: TrendingUp,
       color: "text-green-700",
       bg: "bg-green-50",
@@ -287,21 +344,6 @@ export function StatsCards({
       valueColor: "text-green-700",
     },
   ];
-
-  const aEntrarCard: StatItem = {
-    title: `A entrar em ${formatMesAno(`${mesFiltro}-01`)}`,
-    value: formatCurrency(aEntrarMes),
-    description:
-      qtdParcelasMes === 0
-        ? "Nenhuma parcela neste mês"
-        : `${qtdParcelasMes} parcela${qtdParcelasMes > 1 ? "s" : ""} do crediário`,
-    icon: CalendarDays,
-    color: "text-green-700",
-    bg: "bg-green-50",
-    accent: "border-l-green-600",
-    valueColor: "text-green-700",
-    href: "/financeiro",
-  };
 
   const receberCard: StatItem = {
     title: "A receber (tudo)",
@@ -312,7 +354,6 @@ export function StatsCards({
     bg: "bg-green-50",
     accent: "border-l-green-600",
     valueColor: "text-green-700",
-    href: "/financeiro",
   };
 
   const pagarCard: StatItem = {
@@ -324,7 +365,6 @@ export function StatsCards({
     bg: "bg-brand-red/10",
     accent: "border-l-brand-red",
     valueColor: "text-brand-red",
-    href: "/financeiro",
   };
 
   return (
@@ -348,23 +388,31 @@ export function StatsCards({
             />
           </div>
         </div>
-        <StatCard item={aEntrarCard} isLoading={isLoading || carregandoMes} />
+        <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
+          {previstoCards.map((item) => (
+            <StatCard
+              key={item.title}
+              item={item}
+              isLoading={isLoading || carregandoMes}
+            />
+          ))}
+        </div>
         <p className="mt-1.5 text-[10px] leading-relaxed text-brand-black/45">
-          Soma das parcelas do crediário com vencimento no mês escolhido — não
-          depende do estoque.
+          Use o filtro de mês. “A entrar” soma parcelas do mês e as atrasadas.
+          “Lucro” vem das vendas feitas no mês — não depende do estoque atual.
         </p>
       </div>
 
       <div>
-        <SectionLabel>Estoque</SectionLabel>
+        <SectionLabel>Estoque atual</SectionLabel>
         <div className="grid gap-2 grid-cols-2 lg:grid-cols-3">
           {estoqueCards.map((item) => (
             <StatCard key={item.title} item={item} isLoading={isLoading} />
           ))}
         </div>
         <p className="mt-1.5 text-[10px] leading-relaxed text-brand-black/45">
-          Valores do estoque atual. Se zerar os produtos, estes números ficam
-          R$0,00.
+          Só o que ainda tem na loja. Se o estoque zerar, estes três ficam
+          R$0,00 — isso é normal.
         </p>
       </div>
 
