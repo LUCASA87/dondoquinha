@@ -3,7 +3,13 @@ import { db, mapDbError, dbError } from "@/lib/db/helpers";
 import { devolverEstoqueVenda } from "@/lib/db/estoque-venda";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ComprovantePagamentoData } from "@/lib/store";
-import type { ClienteDebitoResumo, StatusPagamento, ParcelaAVencer, ParcelaVenda } from "@/types/database";
+import type {
+  ClienteDebitoResumo,
+  ContaAPagar,
+  StatusPagamento,
+  ParcelaAVencer,
+  ParcelaVenda,
+} from "@/types/database";
 import { filtrarParcelasPagaveis } from "@/lib/parcelas-utils";
 import {
   agruparNomesItensPorVenda,
@@ -647,6 +653,73 @@ export async function darBaixaConta(id: string) {
   if (error) return dbError(error.message);
 
   return { success: true };
+}
+
+export async function updateContaAPagar(
+  id: string,
+  data: {
+    descricao: string;
+    valor: number;
+    data_vencimento: string;
+    status?: "pago" | "pendente";
+  }
+) {
+  const supabase = await db();
+
+  const descricao = data.descricao.trim();
+  if (!descricao) return { error: "Informe o fornecedor ou descrição." };
+  if (!data.valor || data.valor <= 0) {
+    return { error: "Informe um valor maior que zero." };
+  }
+  if (!data.data_vencimento) {
+    return { error: "Informe a data de vencimento." };
+  }
+
+  const { data: atual, error: buscaError } = await supabase
+    .from("contas_a_pagar")
+    .select("id, status, data_pagamento")
+    .eq("id", id)
+    .single();
+
+  if (buscaError || !atual) {
+    return dbError(buscaError?.message ?? "Conta não encontrada.");
+  }
+
+  const status = data.status ?? (atual.status as "pago" | "pendente");
+  const hoje = new Date().toISOString().split("T")[0];
+  let dataPagamento: string | null = atual.data_pagamento ?? null;
+  if (status === "pago") {
+    dataPagamento = dataPagamento ?? hoje;
+  } else {
+    dataPagamento = null;
+  }
+
+  const { data: atualizada, error } = await supabase
+    .from("contas_a_pagar")
+    .update({
+      descricao,
+      valor: data.valor,
+      data_vencimento: data.data_vencimento,
+      status,
+      data_pagamento: dataPagamento,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return dbError(error.message);
+
+  return { success: true as const, conta: atualizada as ContaAPagar };
+}
+
+export async function deleteContaAPagar(id: string) {
+  const supabase = await db();
+
+  const { error } = await supabase.from("contas_a_pagar").delete().eq("id", id);
+
+  if (error) return dbError(error.message);
+
+  return { success: true as const };
 }
 
 export async function getContasAPagar() {

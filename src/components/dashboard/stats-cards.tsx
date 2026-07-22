@@ -114,7 +114,6 @@ export function StatsCards({
 }: StatsCardsProps) {
   const [stats, setStats] = useState(initialStats);
   const [totalAReceber, setTotalAReceber] = useState(initialAReceber);
-  const [totalContasPagas, setTotalContasPagas] = useState(0);
   const [modoFiltro, setModoFiltro] = useState<ModoFiltroFinanceiro>("mes");
   const [mesFiltro, setMesFiltro] = useState(mesAtualInput);
   const mesPadrao = intervaloDoMes(mesAtualInput());
@@ -182,18 +181,15 @@ export function StatsCards({
       if (!data) {
         setTotalAPagarAbertoMes(0);
         setTotalAPagarPagasMes(0);
-        setTotalContasPagas(0);
         return;
       }
 
       let abertoMes = 0;
       let pagasMes = 0;
-      let pagasTudo = 0;
 
       for (const c of data) {
         const valor = Number(c.valor);
         if (c.status === "pago") {
-          pagasTudo += valor;
           const ref = c.data_pagamento ?? c.data_vencimento;
           if (ref >= inicio && ref <= fim) {
             pagasMes += valor;
@@ -209,7 +205,6 @@ export function StatsCards({
 
       setTotalAPagarAbertoMes(abertoMes);
       setTotalAPagarPagasMes(pagasMes);
-      setTotalContasPagas(pagasTudo);
     } finally {
       setCarregandoPagar(false);
     }
@@ -381,47 +376,28 @@ export function StatsCards({
       ? formatMesAno(`${mesFiltro}-01`)
       : labelPeriodo(periodoAtivo.inicio, periodoAtivo.fim);
 
-  const previstoCards: StatItem[] = [
-    {
-      title: `A entrar · ${modoFiltro === "mes" ? periodoLabel : formatDate(periodoAtivo.fim)}`,
-      value: formatCurrency(aEntrarMes),
-      description: "",
-      icon: CalendarDays,
-      color: "text-green-700",
-      bg: "bg-green-50",
-      accent: "border-l-green-600",
-      valueColor: "text-green-700",
-    },
-    {
-      title: `Vendas · ${periodoLabel}`,
-      value: formatCurrency(brutoVendasMes),
-      description: "",
-      icon: DollarSign,
-      color: "text-brand-red",
-      bg: "bg-brand-red/10",
-      accent: "border-l-brand-red",
-      valueColor: "text-brand-red",
-    },
-    {
-      title: `Lucro · ${periodoLabel}`,
-      value: formatCurrency(lucroVendasMes),
-      description: "",
-      icon: TrendingUp,
-      color: "text-green-700",
-      bg: "bg-green-50",
-      accent: "border-l-green-600",
-      valueColor: "text-green-700",
-    },
-  ];
+  const custoVendasMes = Math.max(0, brutoVendasMes - lucroVendasMes);
+
+  const aEntrarCard: StatItem = {
+    title: `A entrar · ${modoFiltro === "mes" ? periodoLabel : formatDate(periodoAtivo.fim)}`,
+    value: formatCurrency(aEntrarMes),
+    description: "",
+    icon: CalendarDays,
+    color: "text-green-700",
+    bg: "bg-green-50",
+    accent: "border-l-green-600",
+    valueColor: "text-green-700",
+  };
 
   const valorBrutoEstoque = stats.totalVenda;
-  // Valor bruto só desconta contas já pagas (não as em aberto).
-  const valorBrutoLiquido = valorBrutoEstoque - totalContasPagas;
+  // Contas pagas descontam só do recebido do período — e só se houver recebimento.
+  const recebidoLiquido =
+    recebidoMes > 0.001 ? recebidoMes - totalAPagarPagasMes : recebidoMes;
 
   const estoqueResumoCards: StatItem[] = [
     {
       title: "Valor bruto",
-      value: formatCurrency(valorBrutoLiquido),
+      value: formatCurrency(valorBrutoEstoque),
       description: "",
       icon: DollarSign,
       color: "text-brand-red",
@@ -543,14 +519,65 @@ export function StatsCards({
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-1.5">
-          {previstoCards.map((item) => (
-            <StatCard
-              key={item.title}
-              item={item}
-              isLoading={isLoading || carregandoMes}
-            />
-          ))}
+        <Card
+          className={cn(
+            "overflow-hidden rounded-lg border-l-2 border-l-brand-red bg-white",
+            (isLoading || carregandoMes) && "opacity-80"
+          )}
+        >
+          <div className="space-y-1.5 px-2 py-1.5">
+            <p className="text-[9px] font-medium text-brand-black/50">
+              Vendas − custo = líquido · {periodoLabel}
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              <div className="rounded-md bg-brand-red/[0.06] px-1.5 py-1.5">
+                <p className="text-[8px] font-semibold uppercase text-brand-red">
+                  Vendas
+                </p>
+                <p
+                  className={cn(
+                    "text-[13px] font-bold tabular-nums text-brand-red",
+                    (isLoading || carregandoMes) && "animate-pulse"
+                  )}
+                >
+                  {formatCurrency(brutoVendasMes)}
+                </p>
+              </div>
+              <div className="rounded-md bg-brand-cream px-1.5 py-1.5">
+                <p className="text-[8px] font-semibold uppercase text-brand-black/60">
+                  (−) Custo
+                </p>
+                <p
+                  className={cn(
+                    "text-[13px] font-bold tabular-nums text-brand-black",
+                    (isLoading || carregandoMes) && "animate-pulse"
+                  )}
+                >
+                  {formatCurrency(custoVendasMes)}
+                </p>
+              </div>
+              <div className="rounded-md bg-green-50 px-1.5 py-1.5">
+                <p className="text-[8px] font-semibold uppercase text-green-700">
+                  (=) Líquido
+                </p>
+                <p
+                  className={cn(
+                    "text-[13px] font-bold tabular-nums text-green-700",
+                    (isLoading || carregandoMes) && "animate-pulse"
+                  )}
+                >
+                  {formatCurrency(lucroVendasMes)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <div className="mt-1.5">
+          <StatCard
+            item={aEntrarCard}
+            isLoading={isLoading || carregandoMes}
+          />
         </div>
 
         <div className="mt-1.5 grid grid-cols-2 gap-1.5">
@@ -588,7 +615,7 @@ export function StatsCards({
                       (isLoading || carregandoMes) && "animate-pulse"
                     )}
                   >
-                    {formatCurrency(recebidoMes)}
+                    {formatCurrency(recebidoLiquido)}
                   </p>
                 </div>
               </div>

@@ -83,6 +83,17 @@ export async function darBaixaConta(id: string) {
   return withFinanceiroMutation(() => financeiroDb.darBaixaConta(id));
 }
 
+export async function updateContaAPagar(
+  id: string,
+  data: Parameters<typeof financeiroDb.updateContaAPagar>[1]
+) {
+  return withFinanceiroMutation(() => financeiroDb.updateContaAPagar(id, data));
+}
+
+export async function deleteContaAPagar(id: string) {
+  return withFinanceiroMutation(() => financeiroDb.deleteContaAPagar(id));
+}
+
 export async function createCartao(formData: FormData) {
   return withFinanceiroMutation(() => financeiroDb.createCartao(formData));
 }

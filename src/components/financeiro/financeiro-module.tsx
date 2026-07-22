@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { FileDown, Loader2, Plus } from "lucide-react";
+import { FileDown, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,7 +29,9 @@ import { useAppMessages } from "@/components/ui/app-messages";
 import {
   createContaAPagar,
   darBaixaConta,
+  deleteContaAPagar,
   getContasPagasRelatorio,
+  updateContaAPagar,
   type PeriodoRelatorioContas,
 } from "@/lib/mutations/financeiro";
 import { CrediarioReceber } from "@/components/financeiro/crediario-receber";
@@ -43,7 +45,7 @@ import { formatCurrency, formatDate, formatMesAno } from "@/lib/format";
 import { invalidateAfterFinanceiroChange } from "@/lib/queries/page-cache";
 import { mutationError } from "@/lib/db/helpers";
 import { cn } from "@/lib/utils";
-import type { ParcelaVenda, ContaAPagar } from "@/types/database";
+import type { ParcelaVenda, ContaAPagar, StatusPagamento } from "@/types/database";
 
 const LIMITE_CONTAS_PAGINA = 5;
 
@@ -81,12 +83,13 @@ export function FinanceiroModule({
   parcelas,
   contas: initialContas,
 }: FinanceiroModuleProps) {
-  const { toast } = useAppMessages();
+  const { confirm, toast } = useAppMessages();
   const [contas, setContas] = useState(initialContas);
   const [contasPagas, setContasPagas] = useState<ContaAPagar[]>([]);
   const [mesFiltroPagar, setMesFiltroPagar] = useState(mesAtualInput);
   const [amostraPagar, setAmostraPagar] = useState<AmostraPagar>("abertas");
   const [dialogContaAberto, setDialogContaAberto] = useState(false);
+  const [contaEditando, setContaEditando] = useState<ContaAPagar | null>(null);
   const [paginaContas, setPaginaContas] = useState(1);
   const [gerandoRelatorio, setGerandoRelatorio] = useState<PeriodoRelatorioContas | null>(null);
   const [carregandoPagas, setCarregandoPagas] = useState(false);
@@ -165,6 +168,54 @@ export function FinanceiroModule({
       void fetchContasPagasMes(mesFiltroPagar);
       toast("Conta paga. Saiu da lista em aberto.", "success");
     });
+  }
+
+  function abrirEditarConta(conta: ContaAPagar) {
+    setContaEditando(conta);
+    setDialogContaAberto(true);
+  }
+
+  function fecharDialogConta(open: boolean) {
+    setDialogContaAberto(open);
+    if (!open) setContaEditando(null);
+  }
+
+  async function handleApagarConta(conta: ContaAPagar) {
+    const ok = await confirm({
+      title: "Apagar dívida",
+      message: `Apagar "${conta.descricao}" (${formatCurrency(Number(conta.valor))})? Esta ação não pode ser desfeita.`,
+      confirmLabel: "Apagar",
+      variant: "danger",
+    });
+    if (!ok) return;
+
+    startTransition(async () => {
+      const result = await deleteContaAPagar(conta.id);
+      const err = mutationError(result);
+      if (err) {
+        toast(err, "error");
+        return;
+      }
+      setContas((prev) => prev.filter((c) => c.id !== conta.id));
+      setContasPagas((prev) => prev.filter((c) => c.id !== conta.id));
+      invalidateAfterFinanceiroChange();
+      toast("Dívida apagada.", "success");
+    });
+  }
+
+  function aplicarContaAtualizada(conta: ContaAPagar) {
+    if (conta.status === "pendente") {
+      setContas((prev) => {
+        const sem = prev.filter((c) => c.id !== conta.id);
+        return [...sem, conta].sort((a, b) =>
+          a.data_vencimento.localeCompare(b.data_vencimento)
+        );
+      });
+      setContasPagas((prev) => prev.filter((c) => c.id !== conta.id));
+    } else {
+      setContas((prev) => prev.filter((c) => c.id !== conta.id));
+      void fetchContasPagasMes(mesFiltroPagar);
+    }
   }
 
   async function gerarRelatorioPDF(periodo: PeriodoRelatorioContas) {
@@ -312,27 +363,39 @@ export function FinanceiroModule({
                 </div>
               </div>
 
-              <Dialog open={dialogContaAberto} onOpenChange={setDialogContaAberto}>
-                <DialogTrigger asChild>
-                  <Button size="sm">
-                    <Plus className="h-4 w-4" />
-                    Cadastrar Conta
-                  </Button>
-                </DialogTrigger>
+              <Dialog open={dialogContaAberto} onOpenChange={fecharDialogConta}>
+                {!contaEditando && (
+                  <DialogTrigger asChild>
+                    <Button size="sm">
+                      <Plus className="h-4 w-4" />
+                      Cadastrar Conta
+                    </Button>
+                  </DialogTrigger>
+                )}
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Cadastrar Conta a Pagar</DialogTitle>
+                    <DialogTitle>
+                      {contaEditando ? "Editar dívida da loja" : "Cadastrar Conta a Pagar"}
+                    </DialogTitle>
                   </DialogHeader>
                   <ContaForm
+                    conta={contaEditando}
                     onSucesso={(novasContas) => {
+                      const foiEdicao = !!contaEditando;
                       setDialogContaAberto(false);
-                      if (novasContas.length > 0) {
-                        setContas((prev) =>
-                          [...prev, ...novasContas].sort((a, b) =>
-                            a.data_vencimento.localeCompare(b.data_vencimento)
-                          )
-                        );
+                      setContaEditando(null);
+                      if (novasContas.length === 0) return;
+                      if (foiEdicao) {
+                        aplicarContaAtualizada(novasContas[0]);
+                        toast("Dívida atualizada.", "success");
+                        return;
                       }
+                      setContas((prev) =>
+                        [...prev, ...novasContas].sort((a, b) =>
+                          a.data_vencimento.localeCompare(b.data_vencimento)
+                        )
+                      );
+                      toast("Conta cadastrada.", "success");
                     }}
                   />
                 </DialogContent>
@@ -395,18 +458,41 @@ export function FinanceiroModule({
                           </Badge>
                         </TableCell>
                         <TableCell className="px-2 py-2 align-middle text-right">
-                          {amostraPagar === "abertas" ? (
+                          <div className="flex flex-wrap items-center justify-end gap-1">
+                            {amostraPagar === "abertas" && (
+                              <Button
+                                size="sm"
+                                className="h-8 px-2 text-xs touch-manipulation"
+                                onClick={() => handleBaixaConta(c.id)}
+                                disabled={pending}
+                              >
+                                Dar Baixa
+                              </Button>
+                            )}
                             <Button
+                              type="button"
+                              variant="outline"
                               size="sm"
-                              className="h-8 text-xs px-2 touch-manipulation"
-                              onClick={() => handleBaixaConta(c.id)}
+                              className="h-8 px-2 text-xs touch-manipulation"
+                              onClick={() => abrirEditarConta(c)}
                               disabled={pending}
                             >
-                              Dar Baixa
+                              <Pencil className="h-3.5 w-3.5" />
+                              Editar
                             </Button>
-                          ) : (
-                            <span className="text-[10px] text-brand-black/40">—</span>
-                          )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-brand-red touch-manipulation hover:bg-brand-red/10"
+                              onClick={() => handleApagarConta(c)}
+                              disabled={pending}
+                              title="Apagar dívida"
+                              aria-label="Apagar dívida"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -431,14 +517,38 @@ export function FinanceiroModule({
 }
 
 function ContaForm({
+  conta,
   onSucesso,
 }: {
+  conta?: ContaAPagar | null;
   onSucesso: (contas: ContaAPagar[]) => void;
 }) {
+  const editando = !!conta;
   const [parcelas, setParcelas] = useState(1);
   const [valor, setValor] = useState(0);
+  const [descricao, setDescricao] = useState("");
+  const [dataVencimento, setDataVencimento] = useState("");
+  const [status, setStatus] = useState<StatusPagamento>("pendente");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!conta) {
+      setParcelas(1);
+      setValor(0);
+      setDescricao("");
+      setDataVencimento("");
+      setStatus("pendente");
+      setError(null);
+      return;
+    }
+    setDescricao(conta.descricao);
+    setValor(Number(conta.valor));
+    setDataVencimento(conta.data_vencimento);
+    setStatus(conta.status);
+    setParcelas(1);
+    setError(null);
+  }, [conta]);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -449,21 +559,49 @@ function ContaForm({
       return;
     }
 
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    formData.set("valor", String(valor));
-    formData.set("parcelas", String(parcelas));
+    if (!descricao.trim()) {
+      setError("Informe o fornecedor ou descrição.");
+      return;
+    }
+
+    if (!dataVencimento) {
+      setError("Informe a data de vencimento.");
+      return;
+    }
 
     startTransition(async () => {
+      if (editando && conta) {
+        const result = await updateContaAPagar(conta.id, {
+          descricao: descricao.trim(),
+          valor,
+          data_vencimento: dataVencimento,
+          status,
+        });
+        const err = mutationError(result);
+        if (err) {
+          setError(err);
+          return;
+        }
+        onSucesso("conta" in result && result.conta ? [result.conta] : []);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.set("descricao", descricao.trim());
+      formData.set("valor", String(valor));
+      formData.set("parcelas", String(parcelas));
+      formData.set("data_vencimento", dataVencimento);
+
       const result = await createContaAPagar(formData);
       const err = mutationError(result);
       if (err) {
         setError(err);
         return;
       }
-      form.reset();
       setValor(0);
       setParcelas(1);
+      setDescricao("");
+      setDataVencimento("");
       setError(null);
       onSucesso("contas" in result ? result.contas ?? [] : []);
     });
@@ -473,32 +611,85 @@ function ContaForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="descricao">O que você deve? (fornecedor, boleto, etc.)</Label>
-        <Input id="descricao" name="descricao" required placeholder="Ex: Fornecedor X, aluguel..." />
+        <Input
+          id="descricao"
+          name="descricao"
+          required
+          placeholder="Ex: Fornecedor X, aluguel..."
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
+        />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor="valor">Valor total</Label>
+          <Label htmlFor="valor">{editando ? "Valor" : "Valor total"}</Label>
           <InputMoeda id="valor" value={valor} onChange={setValor} required />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="data_vencimento">1º vencimento</Label>
-          <Input id="data_vencimento" name="data_vencimento" type="date" required />
+          <Label htmlFor="data_vencimento">
+            {editando ? "Vencimento" : "1º vencimento"}
+          </Label>
+          <Input
+            id="data_vencimento"
+            name="data_vencimento"
+            type="date"
+            required
+            value={dataVencimento}
+            onChange={(e) => setDataVencimento(e.target.value)}
+          />
         </div>
       </div>
-      <SelecaoBotoes
-        label="Número de vezes"
-        opcoes={OPCOES_PARCELAS}
-        value={parcelas}
-        onChange={setParcelas}
-      />
-      {parcelas > 1 && (
-        <p className="text-xs text-brand-black/60">
-          Serão criadas {parcelas} parcelas, uma a cada 30 dias, com o valor dividido igualmente.
-        </p>
+      {editando ? (
+        <div className="space-y-2">
+          <Label>Status</Label>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { value: "pendente" as const, label: "Em aberto" },
+                { value: "pago" as const, label: "Paga" },
+              ] as const
+            ).map((opcao) => (
+              <button
+                key={opcao.value}
+                type="button"
+                onClick={() => setStatus(opcao.value)}
+                className={cn(
+                  "min-w-[7rem] rounded-lg px-4 py-2.5 text-base font-medium transition-colors",
+                  status === opcao.value
+                    ? "bg-brand-red text-white shadow-sm"
+                    : "border border-brand-black/15 bg-white text-brand-black/70 hover:bg-brand-cream"
+                )}
+              >
+                {opcao.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          <SelecaoBotoes
+            label="Número de vezes"
+            opcoes={OPCOES_PARCELAS}
+            value={parcelas}
+            onChange={setParcelas}
+          />
+          {parcelas > 1 && (
+            <p className="text-xs text-brand-black/60">
+              Serão criadas {parcelas} parcelas, uma a cada 30 dias, com o valor
+              dividido igualmente.
+            </p>
+          )}
+        </>
       )}
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? "Salvando..." : parcelas > 1 ? `Cadastrar ${parcelas} parcelas` : "Cadastrar"}
+        {pending
+          ? "Salvando..."
+          : editando
+            ? "Salvar alterações"
+            : parcelas > 1
+              ? `Cadastrar ${parcelas} parcelas`
+              : "Cadastrar"}
       </Button>
     </form>
   );
