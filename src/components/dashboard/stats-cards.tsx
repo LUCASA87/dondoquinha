@@ -390,9 +390,6 @@ export function StatsCards({
   };
 
   const valorBrutoEstoque = stats.totalVenda;
-  // Contas pagas da loja só entram no líquido quando houve recebimento no período.
-  const recebidoLiquido =
-    recebidoMes > 0.001 ? recebidoMes - totalAPagarPagasMes : recebidoMes;
 
   const estoqueResumoCards: StatItem[] = [
     {
@@ -591,7 +588,7 @@ export function StatsCards({
               <p className="truncate text-[9px] font-medium text-brand-black/50">
                 Crediário · {periodoLabel}
               </p>
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-2 gap-1">
                 <div className="rounded-md bg-brand-red/[0.06] px-1.5 py-1">
                   <p className="text-[8px] font-semibold uppercase text-brand-red">
                     Em aberto
@@ -616,23 +613,6 @@ export function StatsCards({
                     )}
                   >
                     {formatCurrency(recebidoMes)}
-                  </p>
-                </div>
-                <div className="rounded-md bg-brand-cream px-1.5 py-1">
-                  <p className="text-[8px] font-semibold uppercase text-brand-black/60">
-                    Líquido
-                  </p>
-                  <p
-                    className={cn(
-                      "text-[12px] font-bold tabular-nums",
-                      recebidoLiquido < 0
-                        ? "text-brand-red"
-                        : "text-brand-black",
-                      (isLoading || carregandoMes || carregandoPagar) &&
-                        "animate-pulse"
-                    )}
-                  >
-                    {formatCurrency(recebidoLiquido)}
                   </p>
                 </div>
               </div>
