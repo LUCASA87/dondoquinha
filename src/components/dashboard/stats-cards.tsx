@@ -184,9 +184,9 @@ export function StatsCards({
         return;
       }
 
-      // Em aberto = saldo restante da loja (todas as pendentes).
-      // Pagas = só as quitadas no período do filtro.
-      let abertoTotal = 0;
+      // Em aberto = pendentes com vencimento no período (mês seguinte não entra).
+      // Pagas = quitadas no período do filtro.
+      let abertoMes = 0;
       let pagasMes = 0;
 
       for (const c of data) {
@@ -196,12 +196,16 @@ export function StatsCards({
           if (ref >= inicio && ref <= fim) {
             pagasMes += valor;
           }
-        } else if (c.status === "pendente") {
-          abertoTotal += valor;
+        } else if (
+          c.status === "pendente" &&
+          c.data_vencimento >= inicio &&
+          c.data_vencimento <= fim
+        ) {
+          abertoMes += valor;
         }
       }
 
-      setTotalAPagarAbertoMes(abertoTotal);
+      setTotalAPagarAbertoMes(abertoMes);
       setTotalAPagarPagasMes(pagasMes);
     } finally {
       setCarregandoPagar(false);
@@ -624,7 +628,7 @@ export function StatsCards({
           >
             <div className="space-y-1 px-2 py-1.5">
               <p className="truncate text-[9px] font-medium text-brand-black/50">
-                A pagar
+                A pagar · {periodoLabel}
               </p>
               <div className="grid grid-cols-2 gap-1">
                 <div className="rounded-md bg-brand-red/[0.06] px-1.5 py-1">
@@ -642,7 +646,7 @@ export function StatsCards({
                 </div>
                 <div className="rounded-md bg-green-50 px-1.5 py-1">
                   <p className="text-[8px] font-semibold uppercase text-green-700">
-                    Pagas · {periodoLabel}
+                    Pagas
                   </p>
                   <p
                     className={cn(
