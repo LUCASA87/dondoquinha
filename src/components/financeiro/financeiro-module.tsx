@@ -125,13 +125,10 @@ export function FinanceiroModule({
     void fetchContasPagasMes(mesFiltroPagar);
   }, [mesFiltroPagar, fetchContasPagasMes]);
 
-  const contasAbertasMes = useMemo(
-    () => contas.filter((c) => c.data_vencimento.startsWith(mesFiltroPagar)),
-    [contas, mesFiltroPagar]
-  );
-  const totalAbertoMes = useMemo(
-    () => contasAbertasMes.reduce((sum, c) => sum + Number(c.valor), 0),
-    [contasAbertasMes]
+  // Em aberto: todas as dívidas restantes (não filtra por mês).
+  const totalAberto = useMemo(
+    () => contas.reduce((sum, c) => sum + Number(c.valor), 0),
+    [contas]
   );
   const totalPagasMes = useMemo(
     () => contasPagas.reduce((sum, c) => sum + Number(c.valor), 0),
@@ -139,7 +136,7 @@ export function FinanceiroModule({
   );
   const mesLabelPagar = formatMesAno(`${mesFiltroPagar}-01`);
 
-  const listaAtual = amostraPagar === "abertas" ? contasAbertasMes : contasPagas;
+  const listaAtual = amostraPagar === "abertas" ? contas : contasPagas;
   const totalPaginas = Math.max(1, Math.ceil(listaAtual.length / LIMITE_CONTAS_PAGINA));
   const paginaAtual = Math.min(paginaContas, totalPaginas);
   const inicio = (paginaAtual - 1) * LIMITE_CONTAS_PAGINA;
@@ -263,24 +260,24 @@ export function FinanceiroModule({
             <Card className="bg-brand-red/5 border-brand-red/20">
               <CardContent className="space-y-3 pt-4 pb-4">
                 <div className="flex flex-wrap items-end justify-between gap-2">
-                  <p className="text-xs text-brand-black/60">
-                    Contas da loja · {mesLabelPagar}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Label
-                      htmlFor="filtro_mes_pagar"
-                      className="text-[10px] font-medium text-brand-black/55"
-                    >
-                      Mês
-                    </Label>
-                    <Input
-                      id="filtro_mes_pagar"
-                      type="month"
-                      value={mesFiltroPagar}
-                      onChange={(e) => setMesFiltroPagar(e.target.value)}
-                      className="h-8 w-[9.5rem] px-2 text-xs"
-                    />
-                  </div>
+                  <p className="text-xs text-brand-black/60">Contas da loja</p>
+                  {amostraPagar === "pagas" && (
+                    <div className="flex items-center gap-2">
+                      <Label
+                        htmlFor="filtro_mes_pagar"
+                        className="text-[10px] font-medium text-brand-black/55"
+                      >
+                        Mês das pagas
+                      </Label>
+                      <Input
+                        id="filtro_mes_pagar"
+                        type="month"
+                        value={mesFiltroPagar}
+                        onChange={(e) => setMesFiltroPagar(e.target.value)}
+                        className="h-8 w-[9.5rem] px-2 text-xs"
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -297,12 +294,12 @@ export function FinanceiroModule({
                       Em aberto
                     </p>
                     <p className="mt-0.5 text-xl font-bold tabular-nums text-brand-red">
-                      {formatCurrency(totalAbertoMes)}
+                      {formatCurrency(totalAberto)}
                     </p>
                     <p className="text-[10px] text-brand-black/45">
-                      {contasAbertasMes.length === 0
+                      {contas.length === 0
                         ? "Nenhuma"
-                        : `${contasAbertasMes.length} conta${contasAbertasMes.length > 1 ? "s" : ""}`}
+                        : `${contas.length} conta${contas.length > 1 ? "s" : ""}`}
                     </p>
                   </button>
                   <button
@@ -316,7 +313,7 @@ export function FinanceiroModule({
                     )}
                   >
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-green-700">
-                      Pagas
+                      Pagas · {mesLabelPagar}
                     </p>
                     <p
                       className={cn(
@@ -425,7 +422,7 @@ export function FinanceiroModule({
                       >
                         {amostraPagar === "pagas"
                           ? "Nenhuma conta paga neste mês."
-                          : "Nenhuma conta em aberto neste mês."}
+                          : "Nenhuma dívida em aberto."}
                       </TableCell>
                     </TableRow>
                   ) : (
