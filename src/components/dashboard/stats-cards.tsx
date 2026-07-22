@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import {
-  Package,
-  TrendingUp,
-  DollarSign,
-  CalendarDays,
-  type LucideIcon,
-} from "lucide-react";
+import { CalendarDays, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -394,28 +388,36 @@ export function StatsCards({
 
   const valorBrutoEstoque = stats.totalVenda;
 
-  const estoqueResumoCards: StatItem[] = [
+  const estoqueLinhas = [
     {
-      title: "Valor bruto",
+      label: "Custo",
+      value: formatCurrency(stats.totalCusto),
+      rowClass: "bg-brand-cream",
+      labelClass: "text-brand-black/60",
+      valueClass: "text-brand-black",
+    },
+    {
+      label: "Preço venda",
       value: formatCurrency(valorBrutoEstoque),
-      description: "",
-      icon: DollarSign,
-      color: "text-brand-red",
-      bg: "bg-brand-red/10",
-      accent: "border-l-brand-red",
-      valueColor: "text-brand-red",
+      rowClass: "bg-brand-red/[0.06]",
+      labelClass: "text-brand-red",
+      valueClass: "text-brand-red",
     },
     {
-      title: "Lucro estoque",
-      value: formatCurrency(stats.lucroEstimado),
-      description: "",
-      icon: TrendingUp,
-      color: "text-green-700",
-      bg: "bg-green-50",
-      accent: "border-l-green-600",
-      valueColor: "text-green-700",
+      label: "Valor bruto",
+      value: formatCurrency(valorBrutoEstoque),
+      rowClass: "bg-brand-red/[0.06]",
+      labelClass: "text-brand-red",
+      valueClass: "text-brand-red",
     },
-  ];
+    {
+      label: "Lucro estoque",
+      value: formatCurrency(stats.lucroEstimado),
+      rowClass: "bg-green-50",
+      labelClass: "text-green-700",
+      valueClass: "text-green-700",
+    },
+  ] as const;
 
   return (
     <div className="space-y-4">
@@ -682,40 +684,42 @@ export function StatsCards({
       <div className="border-t border-brand-red/10 pt-2">
         <SectionLabel>Estoque atual</SectionLabel>
 
-        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-          <StatCard
-            item={{
-              title: "Custo",
-              value: formatCurrency(stats.totalCusto),
-              description: "",
-              icon: Package,
-              color: "text-brand-black",
-              bg: "bg-brand-cream",
-              accent: "border-l-brand-black",
-            }}
-            isLoading={isLoading}
-          />
-          <StatCard
-            item={{
-              title: "Preço venda",
-              value: formatCurrency(valorBrutoEstoque),
-              description: "",
-              icon: DollarSign,
-              color: "text-brand-red",
-              bg: "bg-brand-red/10",
-              accent: "border-l-brand-red",
-              valueColor: "text-brand-red",
-            }}
-            isLoading={isLoading}
-          />
-          {estoqueResumoCards.map((item) => (
-            <StatCard
-              key={item.title}
-              item={item}
-              isLoading={isLoading || carregandoPagar}
-            />
-          ))}
-        </div>
+        <Card
+          className={cn(
+            "overflow-hidden rounded-md border-l-2 border-l-brand-black bg-white",
+            isLoading && "opacity-80"
+          )}
+        >
+          <div className="flex flex-col gap-0.5 px-1.5 py-1">
+            {estoqueLinhas.map((linha) => (
+              <div
+                key={linha.label}
+                className={cn(
+                  "flex items-center justify-between gap-1 rounded px-1 py-0.5",
+                  linha.rowClass
+                )}
+              >
+                <span
+                  className={cn(
+                    "text-[7px] font-semibold uppercase",
+                    linha.labelClass
+                  )}
+                >
+                  {linha.label}
+                </span>
+                <span
+                  className={cn(
+                    "text-[10px] font-bold tabular-nums",
+                    linha.valueClass,
+                    isLoading && "animate-pulse"
+                  )}
+                >
+                  {linha.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
       </div>
     </div>
   );
