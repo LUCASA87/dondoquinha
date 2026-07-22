@@ -67,10 +67,11 @@ function mapParcelas(
 ): ParcelaAberta[] {
   if (!rows) return [];
   return rows.map((p) => {
-    const valorPago = Number(p.valor_pago ?? 0);
-    const valorParcela = Number(p.valor_parcela);
+    const row = p as unknown as ParcelaVenda;
+    const valorPago = Number(row.valor_pago ?? 0);
+    const valorParcela = Number(row.valor_parcela);
     return {
-      ...(p as ParcelaVenda),
+      ...row,
       valor_pago: valorPago,
       saldo_parcela: Math.max(0, valorParcela - valorPago),
     };

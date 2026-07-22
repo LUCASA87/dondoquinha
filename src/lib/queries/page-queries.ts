@@ -192,20 +192,22 @@ export async function queryVendas(
   const semNome =
     "id, cliente_id, valor_total, forma_pagamento, parcelas, status, obs, data_venda, created_at, clientes(nome)";
 
-  let { data, error } = await supabase
+  const primeiro = await supabase
     .from("vendas")
     .select(comNome)
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (error) {
-    ({ data, error } = await supabase
-      .from("vendas")
-      .select(semNome)
-      .order("created_at", { ascending: false })
-      .limit(limit));
-  }
+  const resultado = primeiro.error
+    ? await supabase
+        .from("vendas")
+        .select(semNome)
+        .order("created_at", { ascending: false })
+        .limit(limit)
+    : primeiro;
 
-  if (error || !data) return [];
-  return data as unknown as (Venda & { clientes: { nome: string } | null })[];
+  if (resultado.error || !resultado.data) return [];
+  return resultado.data as unknown as (Venda & {
+    clientes: { nome: string } | null;
+  })[];
 }
