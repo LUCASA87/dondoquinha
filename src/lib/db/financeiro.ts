@@ -181,6 +181,77 @@ export async function getParcelasAbertas(): Promise<
   })[];
 }
 
+export async function updateParcelaCrediarioStatus(
+  parcelaId: string,
+  status: "pago" | "pendente"
+) {
+  const supabase = await db();
+
+  if (status !== "pago" && status !== "pendente") {
+    return { error: "Status inválido." };
+  }
+
+  const { data: parcela, error: parcelaError } = await supabase
+    .from("parcelas_vendas")
+    .select("id, venda_id, valor_parcela, status")
+    .eq("id", parcelaId)
+    .single();
+
+  if (parcelaError || !parcela) {
+    return dbError(parcelaError?.message ?? "Parcela não encontrada.");
+  }
+
+  if (parcela.status === status) return { success: true as const };
+
+  if (status === "pendente") {
+    const { error: delPag } = await supabase
+      .from("pagamentos_crediario")
+      .delete()
+      .eq("parcela_id", parcelaId);
+    if (delPag) return dbError(delPag.message);
+
+    const { error: up } = await supabase
+      .from("parcelas_vendas")
+      .update({ status: "pendente", valor_pago: 0 })
+      .eq("id", parcelaId);
+    if (up) return dbError(up.message);
+  } else {
+    const { error: up } = await supabase
+      .from("parcelas_vendas")
+      .update({
+        status: "pago",
+        valor_pago: Number(parcela.valor_parcela),
+      })
+      .eq("id", parcelaId);
+    if (up) return dbError(up.message);
+  }
+
+  const { data: todas } = await supabase
+    .from("parcelas_vendas")
+    .select("valor_pago")
+    .eq("venda_id", parcela.venda_id);
+
+  const { data: venda } = await supabase
+    .from("vendas")
+    .select("valor_total")
+    .eq("id", parcela.venda_id)
+    .maybeSingle();
+
+  const totalPago = (todas ?? []).reduce(
+    (sum, p) => sum + Number(p.valor_pago ?? 0),
+    0
+  );
+  const valorTotal = Number(venda?.valor_total ?? 0);
+  const vendaQuitada = valorTotal > 0 && totalPago >= valorTotal - 0.001;
+
+  await supabase
+    .from("vendas")
+    .update({ status: vendaQuitada ? "pago" : "pendente" })
+    .eq("id", parcela.venda_id);
+
+  return { success: true as const };
+}
+
 export async function excluirParcelaCrediario(parcelaId: string) {
   const supabase = await db();
 

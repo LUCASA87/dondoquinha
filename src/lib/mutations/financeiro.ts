@@ -42,6 +42,19 @@ export async function registrarPagamentoCrediario(
   return withFinanceiroMutation(() => financeiroDb.registrarPagamentoCrediario(data));
 }
 
+export async function updateParcelaCrediarioStatus(
+  parcelaId: string,
+  status: "pago" | "pendente"
+) {
+  const result = await withFinanceiroMutation(() =>
+    financeiroDb.updateParcelaCrediarioStatus(parcelaId, status)
+  );
+  if ("success" in result && result.success) {
+    invalidateAfterVendasChange();
+  }
+  return result;
+}
+
 export async function excluirParcelaCrediario(parcelaId: string) {
   const result = await withFinanceiroMutation(() =>
     financeiroDb.excluirParcelaCrediario(parcelaId)

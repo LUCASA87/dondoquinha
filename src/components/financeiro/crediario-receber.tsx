@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { DollarSign, Eye, EyeOff, Trash2 } from "lucide-react";
+import { DollarSign, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppMessages } from "@/components/ui/app-messages";
@@ -31,6 +31,7 @@ import {
   apagarTudoCrediarioReceber,
   registrarPagamentoCrediario,
   excluirParcelaCrediario,
+  updateParcelaCrediarioStatus,
 } from "@/lib/mutations/financeiro";
 import { ComprovantePagamento } from "@/components/financeiro/comprovante-pagamento";
 import { createClient } from "@/lib/supabase/client";
@@ -47,7 +48,7 @@ import {
 } from "@/lib/queries/page-cache";
 import { mutationError } from "@/lib/db/helpers";
 import { verificarSenhaLogin } from "@/lib/verificar-senha-login";
-import type { ParcelaVenda } from "@/types/database";
+import type { ParcelaVenda, StatusPagamento } from "@/types/database";
 import type { ComprovantePagamentoData } from "@/lib/store";
 
 interface ParcelaAberta extends ParcelaVenda {
@@ -96,6 +97,8 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
   const [comprovante, setComprovante] = useState<ComprovantePagamentoData | null>(null);
   const [showComprovante, setShowComprovante] = useState(false);
   const [carregandoPagas, setCarregandoPagas] = useState(false);
+  const [parcelaStatusEdit, setParcelaStatusEdit] = useState<ParcelaAberta | null>(null);
+  const [statusEdit, setStatusEdit] = useState<StatusPagamento>("pago");
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -121,9 +124,52 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
     }
   }, []);
 
+  const fetchParcelasAbertas = useCallback(async () => {
+    const supabase = createClient();
+    const { data, error } = await selectParcelasPorStatusComCliente(
+      supabase,
+      "pendente",
+      "asc"
+    );
+    if (error || !data) return;
+    setParcelas(
+      mapParcelas(data).filter((p) => p.saldo_parcela > 0.001)
+    );
+  }, []);
+
   useEffect(() => {
     void fetchParcelasPagas();
   }, [fetchParcelasPagas]);
+
+  function abrirEditarStatus(p: ParcelaAberta) {
+    setParcelaStatusEdit(p);
+    setStatusEdit((p.status as StatusPagamento) === "pago" ? "pago" : "pendente");
+  }
+
+  function salvarStatusParcela() {
+    if (!parcelaStatusEdit) return;
+    startTransition(async () => {
+      const result = await updateParcelaCrediarioStatus(
+        parcelaStatusEdit.id,
+        statusEdit
+      );
+      const err = mutationError(result);
+      if (err) {
+        toast(err, "error");
+        return;
+      }
+      setParcelaStatusEdit(null);
+      await Promise.all([fetchParcelasPagas(), fetchParcelasAbertas()]);
+      invalidateAfterFinanceiroChange();
+      invalidateAfterVendasChange();
+      toast(
+        statusEdit === "pendente"
+          ? "Parcela voltou para a receber."
+          : "Parcela marcada como paga.",
+        "success"
+      );
+    });
+  }
 
   const totalReceber = useMemo(
     () => parcelas.reduce((sum, p) => sum + p.saldo_parcela, 0),
@@ -405,15 +451,13 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                         {amostra === "pago" ? "Pago" : "Já pago"}
                       </TableHead>
                       {amostra === "receber" ? (
-                        <>
-                          <TableHead className="h-8 px-2 py-1 text-[10px]">Falta</TableHead>
-                          <TableHead className="h-8 px-2 py-1 text-right text-[10px]">
-                            Ação
-                          </TableHead>
-                        </>
+                        <TableHead className="h-8 px-2 py-1 text-[10px]">Falta</TableHead>
                       ) : (
                         <TableHead className="h-8 px-2 py-1 text-[10px]">Status</TableHead>
                       )}
+                      <TableHead className="h-8 px-2 py-1 text-right text-[10px]">
+                        Ação
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody className="bg-transparent">
@@ -483,11 +527,33 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                             {formatCurrency(Number(p.valor_pago ?? 0))}
                           </TableCell>
                           {amostra === "receber" ? (
-                            <>
-                              <TableCell className="px-2 py-2 align-middle font-medium tabular-nums text-brand-red">
-                                {formatCurrency(p.saldo_parcela)}
-                              </TableCell>
-                              <TableCell className="w-10 px-2 py-2 text-right align-middle">
+                            <TableCell className="px-2 py-2 align-middle font-medium tabular-nums text-brand-red">
+                              {formatCurrency(p.saldo_parcela)}
+                            </TableCell>
+                          ) : (
+                            <TableCell className="px-2 py-2 align-middle">
+                              <Badge variant="success" className="px-1.5 py-0 text-[10px]">
+                                Paga
+                              </Badge>
+                            </TableCell>
+                          )}
+                          <TableCell className="w-20 px-2 py-2 text-right align-middle">
+                            <div className="flex items-center justify-end gap-0.5">
+                              {amostra === "pago" && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 touch-manipulation hover:bg-brand-cream"
+                                  onClick={() => abrirEditarStatus(p)}
+                                  disabled={pending}
+                                  title="Editar status"
+                                  aria-label="Editar status"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              {amostra === "receber" && (
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -500,15 +566,9 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
-                              </TableCell>
-                            </>
-                          ) : (
-                            <TableCell className="px-2 py-2 align-middle">
-                              <Badge variant="success" className="px-1.5 py-0 text-[10px]">
-                                Paga
-                              </Badge>
-                            </TableCell>
-                          )}
+                              )}
+                            </div>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -531,6 +591,82 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
         </CardContent>
       </Card>
       )}
+
+      <Dialog
+        open={!!parcelaStatusEdit}
+        onOpenChange={(open) => {
+          if (!open) setParcelaStatusEdit(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar status da parcela</DialogTitle>
+            <DialogDescription>
+              {parcelaStatusEdit
+                ? `${nomeClienteDaVenda(parcelaStatusEdit.vendas)} · parcela ${parcelaStatusEdit.numero_parcela}/${parcelaStatusEdit.vendas?.parcelas ?? "—"} · ${formatCurrency(Number(parcelaStatusEdit.valor_parcela))}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { value: "pendente" as const, label: "Em aberto" },
+                    { value: "pago" as const, label: "Paga" },
+                  ] as const
+                ).map((opcao) => {
+                  const selecionado = statusEdit === opcao.value;
+                  return (
+                    <button
+                      key={opcao.value}
+                      type="button"
+                      onClick={() => setStatusEdit(opcao.value)}
+                      className={cn(
+                        "min-w-[7rem] rounded-lg px-4 py-2.5 text-base font-medium transition-colors",
+                        selecionado
+                          ? "bg-brand-red text-white shadow-sm"
+                          : "border border-brand-black/15 bg-white text-brand-black/70 hover:bg-brand-cream hover:text-brand-black"
+                      )}
+                    >
+                      {opcao.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <p className="text-sm text-brand-black/55">
+              Em aberto volta a parcela para cobrança e apaga os pagamentos
+              dela. Paga marca a parcela como quitada.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setParcelaStatusEdit(null)}
+                disabled={pending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={salvarStatusParcela}
+                disabled={
+                  pending ||
+                  !parcelaStatusEdit ||
+                  statusEdit ===
+                    ((parcelaStatusEdit.status as StatusPagamento) === "pago"
+                      ? "pago"
+                      : "pendente")
+                }
+              >
+                {pending ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showPagamento} onOpenChange={(open) => !open && fecharPagamento()}>
         <DialogContent className="max-w-lg">
