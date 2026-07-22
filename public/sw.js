@@ -1,4 +1,4 @@
-const CACHE = "dondoquinha-v3";
+const CACHE = "dondoquinha-v4";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

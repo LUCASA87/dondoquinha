@@ -595,10 +595,10 @@ export function StatsCards({
           />
         </div>
 
-        <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+        <div className="mt-1.5 grid grid-cols-2 gap-1">
           <Card
             className={cn(
-              "overflow-hidden rounded-lg border-l-2 border-l-green-600 bg-white",
+              "overflow-hidden rounded-md border-l-2 border-l-green-600 bg-white",
               (isLoading || carregandoMes) && "opacity-80"
             )}
           >
@@ -607,38 +607,38 @@ export function StatsCards({
                 Crediário · {periodoLabel}
               </p>
               <div className="flex flex-col gap-0.5">
-                <div className="flex items-center justify-between gap-1 rounded bg-brand-red/[0.06] px-1.5 py-0.5">
-                  <p className="text-[7px] font-semibold uppercase text-brand-red">
+                <div className="flex items-center justify-between gap-1 rounded bg-brand-red/[0.06] px-1 py-0.5">
+                  <span className="text-[7px] font-semibold uppercase text-brand-red">
                     Em aberto
-                  </p>
-                  <p
+                  </span>
+                  <span
                     className={cn(
-                      "text-[11px] font-bold tabular-nums text-brand-red",
+                      "text-[10px] font-bold tabular-nums text-brand-red",
                       isLoading && "animate-pulse"
                     )}
                   >
                     {formatCurrency(totalAReceber)}
-                  </p>
+                  </span>
                 </div>
-                <div className="flex items-center justify-between gap-1 rounded bg-green-50 px-1.5 py-0.5">
-                  <p className="text-[7px] font-semibold uppercase text-green-700">
+                <div className="flex items-center justify-between gap-1 rounded bg-green-50 px-1 py-0.5">
+                  <span className="text-[7px] font-semibold uppercase text-green-700">
                     Recebido
-                  </p>
-                  <p
+                  </span>
+                  <span
                     className={cn(
-                      "text-[11px] font-bold tabular-nums text-green-700",
+                      "text-[10px] font-bold tabular-nums text-green-700",
                       (isLoading || carregandoMes) && "animate-pulse"
                     )}
                   >
                     {formatCurrency(recebidoMes)}
-                  </p>
+                  </span>
                 </div>
               </div>
             </div>
           </Card>
           <Card
             className={cn(
-              "overflow-hidden rounded-lg border-l-2 border-l-brand-red bg-white",
+              "overflow-hidden rounded-md border-l-2 border-l-brand-red bg-white",
               (isLoading || carregandoPagar) && "opacity-80"
             )}
           >
@@ -647,31 +647,31 @@ export function StatsCards({
                 A pagar · {periodoLabel}
               </p>
               <div className="flex flex-col gap-0.5">
-                <div className="flex items-center justify-between gap-1 rounded bg-brand-red/[0.06] px-1.5 py-0.5">
-                  <p className="text-[7px] font-semibold uppercase text-brand-red">
+                <div className="flex items-center justify-between gap-1 rounded bg-brand-red/[0.06] px-1 py-0.5">
+                  <span className="text-[7px] font-semibold uppercase text-brand-red">
                     Em aberto
-                  </p>
-                  <p
+                  </span>
+                  <span
                     className={cn(
-                      "text-[11px] font-bold tabular-nums text-brand-red",
+                      "text-[10px] font-bold tabular-nums text-brand-red",
                       (isLoading || carregandoPagar) && "animate-pulse"
                     )}
                   >
                     {formatCurrency(totalAPagarAbertoMes)}
-                  </p>
+                  </span>
                 </div>
-                <div className="flex items-center justify-between gap-1 rounded bg-green-50 px-1.5 py-0.5">
-                  <p className="text-[7px] font-semibold uppercase text-green-700">
+                <div className="flex items-center justify-between gap-1 rounded bg-green-50 px-1 py-0.5">
+                  <span className="text-[7px] font-semibold uppercase text-green-700">
                     Pagas
-                  </p>
-                  <p
+                  </span>
+                  <span
                     className={cn(
-                      "text-[11px] font-bold tabular-nums text-green-700",
+                      "text-[10px] font-bold tabular-nums text-green-700",
                       (isLoading || carregandoPagar) && "animate-pulse"
                     )}
                   >
                     {formatCurrency(totalAPagarPagasMes)}
-                  </p>
+                  </span>
                 </div>
               </div>
             </div>
