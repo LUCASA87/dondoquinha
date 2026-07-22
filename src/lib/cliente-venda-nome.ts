@@ -13,8 +13,10 @@ export function nomeClienteDaVenda(venda?: {
 }
 
 /** Select de parcelas com cliente_nome; se a coluna ainda não existir, tenta sem ela. */
-export async function selectParcelasAbertasComCliente(
-  supabase: SupabaseClient
+export async function selectParcelasPorStatusComCliente(
+  supabase: SupabaseClient,
+  status: "pendente" | "pago",
+  ordem: "asc" | "desc" = status === "pago" ? "desc" : "asc"
 ) {
   const comNome =
     "id, venda_id, numero_parcela, valor_parcela, valor_pago, data_vencimento, status, vendas(id, valor_total, parcelas, cliente_nome, clientes(nome))";
@@ -24,14 +26,20 @@ export async function selectParcelasAbertasComCliente(
   const primeiro = await supabase
     .from("parcelas_vendas")
     .select(comNome)
-    .eq("status", "pendente")
-    .order("data_vencimento");
+    .eq("status", status)
+    .order("data_vencimento", { ascending: ordem === "asc" });
 
   if (!primeiro.error) return primeiro;
 
   return supabase
     .from("parcelas_vendas")
     .select(semNome)
-    .eq("status", "pendente")
-    .order("data_vencimento");
+    .eq("status", status)
+    .order("data_vencimento", { ascending: ordem === "asc" });
+}
+
+export async function selectParcelasAbertasComCliente(
+  supabase: SupabaseClient
+) {
+  return selectParcelasPorStatusComCliente(supabase, "pendente", "asc");
 }

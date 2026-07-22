@@ -68,13 +68,13 @@ function StatCard({ item, isLoading }: { item: StatItem; isLoading?: boolean }) 
   return (
     <Card
       className={cn(
-        "overflow-hidden rounded-xl border-l-2 bg-gradient-to-br from-white to-brand-cream/20",
+        "overflow-hidden rounded-xl border-l-2 bg-gradient-to-br from-white to-brand-cream/25 shadow-sm shadow-brand-black/[0.03]",
         item.accent,
         isLoading && "opacity-80"
       )}
     >
-      <div className="flex items-center gap-2 px-2.5 py-2">
-        <div className={cn("rounded-md p-1 shrink-0", item.bg)}>
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
+        <div className={cn("rounded-lg p-1.5 shrink-0", item.bg)}>
           <item.icon className={cn("h-3.5 w-3.5", item.color)} />
         </div>
         <div className="min-w-0 flex-1">
@@ -83,7 +83,7 @@ function StatCard({ item, isLoading }: { item: StatItem; isLoading?: boolean }) 
           </p>
           <p
             className={cn(
-              "text-sm font-bold tabular-nums leading-tight mt-0.5",
+              "mt-0.5 text-[15px] font-bold tabular-nums tracking-tight leading-tight",
               item.valueColor ?? "text-brand-black",
               isLoading && "animate-pulse"
             )}
@@ -91,7 +91,7 @@ function StatCard({ item, isLoading }: { item: StatItem; isLoading?: boolean }) 
             {item.value}
           </p>
           {item.description ? (
-            <p className="text-[9px] text-brand-black/40 leading-tight mt-0.5 truncate">
+            <p className="mt-0.5 truncate text-[9px] leading-tight text-brand-black/40">
               {item.description}
             </p>
           ) : null}
@@ -412,8 +412,8 @@ export function StatsCards({
       value: formatCurrency(valorBrutoLiquido),
       description:
         totalContasPagas > 0
-          ? `Preço de venda menos contas pagas (${formatCurrency(totalContasPagas)})`
-          : "Preço de venda do estoque (ainda sem contas pagas)",
+          ? `Menos contas pagas (${formatCurrency(totalContasPagas)})`
+          : "Estoque a preço de venda",
       icon: DollarSign,
       color: "text-brand-red",
       bg: "bg-brand-red/10",
@@ -423,7 +423,7 @@ export function StatsCards({
     {
       title: "Lucro do estoque",
       value: formatCurrency(stats.lucroEstimado),
-      description: "Preço de venda menos preço de custo",
+      description: "Venda menos custo",
       icon: TrendingUp,
       color: "text-green-700",
       bg: "bg-green-50",
@@ -467,13 +467,13 @@ export function StatsCards({
         <div className="mt-2 grid gap-2 grid-cols-1 sm:grid-cols-2">
           <Card
             className={cn(
-              "overflow-hidden rounded-xl border-l-2 border-l-green-600 bg-gradient-to-br from-white to-brand-cream/20",
+              "overflow-hidden rounded-xl border-l-2 border-l-green-600 bg-gradient-to-br from-white to-brand-cream/25 shadow-sm shadow-brand-black/[0.03]",
               (isLoading || carregandoMes) && "opacity-80"
             )}
           >
-            <div className="space-y-2 px-2.5 py-2">
+            <div className="space-y-2.5 px-3 py-2.5">
               <div className="flex min-w-0 items-center gap-1.5">
-                <div className="shrink-0 rounded-md bg-green-50 p-1">
+                <div className="shrink-0 rounded-lg bg-green-50 p-1.5">
                   <Wallet className="h-3.5 w-3.5 text-green-700" />
                 </div>
                 <p className="truncate text-[10px] font-medium text-brand-black/55">
@@ -481,29 +481,27 @@ export function StatsCards({
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg border border-brand-red/15 bg-brand-red/[0.04] px-2 py-1.5">
+                <div className="rounded-xl border border-brand-red/15 bg-brand-red/[0.04] px-2.5 py-2">
                   <p className="text-[9px] font-semibold uppercase tracking-wide text-brand-red">
                     Em aberto
                   </p>
                   <p
                     className={cn(
-                      "mt-0.5 text-sm font-bold tabular-nums text-brand-red",
+                      "mt-0.5 text-[15px] font-bold tabular-nums tracking-tight text-brand-red",
                       isLoading && "animate-pulse"
                     )}
                   >
                     {formatCurrency(totalAReceber)}
                   </p>
-                  <p className="text-[9px] text-brand-black/40">
-                    Ainda a receber
-                  </p>
+                  <p className="text-[9px] text-brand-black/40">A receber</p>
                 </div>
-                <div className="rounded-lg border border-green-200 bg-green-50/70 px-2 py-1.5">
+                <div className="rounded-xl border border-green-200 bg-green-50/80 px-2.5 py-2">
                   <p className="text-[9px] font-semibold uppercase tracking-wide text-green-700">
                     Recebido
                   </p>
                   <p
                     className={cn(
-                      "mt-0.5 text-sm font-bold tabular-nums text-green-700",
+                      "mt-0.5 text-[15px] font-bold tabular-nums tracking-tight text-green-700",
                       (isLoading || carregandoMes) && "animate-pulse"
                     )}
                   >
@@ -511,8 +509,8 @@ export function StatsCards({
                   </p>
                   <p className="text-[9px] text-brand-black/40">
                     {qtdRecebidoMes === 0
-                      ? "Nada neste mês"
-                      : `${qtdRecebidoMes} pagamento${qtdRecebidoMes > 1 ? "s" : ""} no mês`}
+                      ? "Neste mês"
+                      : `${qtdRecebidoMes} no mês`}
                   </p>
                 </div>
               </div>
@@ -520,14 +518,14 @@ export function StatsCards({
           </Card>
           <Card
             className={cn(
-              "overflow-hidden rounded-xl border-l-2 border-l-brand-red bg-gradient-to-br from-white to-brand-cream/20",
+              "overflow-hidden rounded-xl border-l-2 border-l-brand-red bg-gradient-to-br from-white to-brand-cream/25 shadow-sm shadow-brand-black/[0.03]",
               (isLoading || carregandoPagar) && "opacity-80"
             )}
           >
-            <div className="space-y-2 px-2.5 py-2">
+            <div className="space-y-2.5 px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-1.5">
-                  <div className="shrink-0 rounded-md bg-brand-red/10 p-1">
+                  <div className="shrink-0 rounded-lg bg-brand-red/10 p-1.5">
                     <Receipt className="h-3.5 w-3.5 text-brand-red" />
                   </div>
                   <p className="truncate text-[10px] font-medium text-brand-black/55">
@@ -543,13 +541,13 @@ export function StatsCards({
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg border border-brand-red/15 bg-brand-red/[0.04] px-2 py-1.5">
+                <div className="rounded-xl border border-brand-red/15 bg-brand-red/[0.04] px-2.5 py-2">
                   <p className="text-[9px] font-semibold uppercase tracking-wide text-brand-red">
                     Em aberto
                   </p>
                   <p
                     className={cn(
-                      "mt-0.5 text-sm font-bold tabular-nums text-brand-red",
+                      "mt-0.5 text-[15px] font-bold tabular-nums tracking-tight text-brand-red",
                       (isLoading || carregandoPagar) && "animate-pulse"
                     )}
                   >
@@ -561,13 +559,13 @@ export function StatsCards({
                       : `${qtdAbertoMes} conta${qtdAbertoMes > 1 ? "s" : ""}`}
                   </p>
                 </div>
-                <div className="rounded-lg border border-green-200 bg-green-50/70 px-2 py-1.5">
+                <div className="rounded-xl border border-green-200 bg-green-50/80 px-2.5 py-2">
                   <p className="text-[9px] font-semibold uppercase tracking-wide text-green-700">
                     Pagas
                   </p>
                   <p
                     className={cn(
-                      "mt-0.5 text-sm font-bold tabular-nums text-green-700",
+                      "mt-0.5 text-[15px] font-bold tabular-nums tracking-tight text-green-700",
                       (isLoading || carregandoPagar) && "animate-pulse"
                     )}
                   >
@@ -583,11 +581,6 @@ export function StatsCards({
             </div>
           </Card>
         </div>
-
-        <p className="mt-1.5 text-[10px] leading-relaxed text-brand-black/45">
-          Crediário: em aberto (ainda deve) e recebido no mês. A pagar: em aberto
-          e contas já pagas no mês.
-        </p>
       </div>
 
       <div className="border-t border-brand-red/10 pt-3">
@@ -595,14 +588,14 @@ export function StatsCards({
 
         <Card
           className={cn(
-            "mb-2 overflow-hidden rounded-xl border border-brand-red/15 bg-gradient-to-br from-brand-cream/40 via-white to-white",
+            "mb-2 overflow-hidden rounded-xl border border-brand-red/15 bg-gradient-to-br from-brand-cream/50 via-white to-white shadow-sm shadow-brand-red/[0.04]",
             isLoading && "opacity-80"
           )}
         >
           <div className="grid grid-cols-1 divide-y divide-brand-red/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-            <div className="px-3 py-3">
-              <div className="mb-1.5 flex items-center gap-1.5">
-                <div className="rounded-md bg-brand-cream p-1">
+            <div className="px-3.5 py-3.5">
+              <div className="mb-2 flex items-center gap-1.5">
+                <div className="rounded-md bg-brand-cream p-1.5">
                   <Package className="h-3.5 w-3.5 text-brand-black" />
                 </div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-black/55">
@@ -611,20 +604,20 @@ export function StatsCards({
               </div>
               <p
                 className={cn(
-                  "text-xl font-bold tabular-nums text-brand-black sm:text-2xl",
+                  "text-xl font-bold tabular-nums tracking-tight text-brand-black sm:text-2xl",
                   isLoading && "animate-pulse"
                 )}
               >
                 {formatCurrency(stats.totalCusto)}
               </p>
-              <p className="mt-1 text-[10px] text-brand-black/45">
-                Quanto você pagou no que ainda tem na loja
+              <p className="mt-1 text-[10px] text-brand-black/40">
+                Investido no estoque
               </p>
             </div>
 
-            <div className="bg-brand-red/[0.04] px-3 py-3">
-              <div className="mb-1.5 flex items-center gap-1.5">
-                <div className="rounded-md bg-brand-red/10 p-1">
+            <div className="bg-brand-red/[0.03] px-3.5 py-3.5">
+              <div className="mb-2 flex items-center gap-1.5">
+                <div className="rounded-md bg-brand-red/10 p-1.5">
                   <DollarSign className="h-3.5 w-3.5 text-brand-red" />
                 </div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-red">
@@ -633,14 +626,14 @@ export function StatsCards({
               </div>
               <p
                 className={cn(
-                  "text-xl font-bold tabular-nums text-brand-red sm:text-2xl",
+                  "text-xl font-bold tabular-nums tracking-tight text-brand-red sm:text-2xl",
                   isLoading && "animate-pulse"
                 )}
               >
                 {formatCurrency(valorBrutoEstoque)}
               </p>
-              <p className="mt-1 text-[10px] text-brand-black/45">
-                Se vender tudo o que ainda tem
+              <p className="mt-1 text-[10px] text-brand-black/40">
+                Se vender o estoque
               </p>
             </div>
           </div>
@@ -655,10 +648,6 @@ export function StatsCards({
             />
           ))}
         </div>
-        <p className="mt-1.5 text-[10px] leading-relaxed text-brand-black/45">
-          Valor bruto = preço de venda do estoque menos só as contas já pagas.
-          Contas em aberto não entram nesse desconto.
-        </p>
       </div>
     </div>
   );

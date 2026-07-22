@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { DollarSign, Eye, EyeOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { SelecaoParcelaDebito } from "@/components/ui/selecao-botoes";
 import {
   apagarTudoCrediarioReceber,
@@ -32,8 +33,12 @@ import {
   excluirParcelaCrediario,
 } from "@/lib/mutations/financeiro";
 import { ComprovantePagamento } from "@/components/financeiro/comprovante-pagamento";
+import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { nomeClienteDaVenda } from "@/lib/cliente-venda-nome";
+import {
+  nomeClienteDaVenda,
+  selectParcelasPorStatusComCliente,
+} from "@/lib/cliente-venda-nome";
 import { cn } from "@/lib/utils";
 import { filtrarParcelasPagaveis } from "@/lib/parcelas-utils";
 import {
@@ -55,9 +60,28 @@ interface CrediarioReceberProps {
 
 const LIMITE_PARCELAS_PAGINA = 5;
 
+type AmostraReceber = "receber" | "pago";
+
+function mapParcelas(
+  rows: Awaited<ReturnType<typeof selectParcelasPorStatusComCliente>>["data"]
+): ParcelaAberta[] {
+  if (!rows) return [];
+  return rows.map((p) => {
+    const valorPago = Number(p.valor_pago ?? 0);
+    const valorParcela = Number(p.valor_parcela);
+    return {
+      ...(p as ParcelaVenda),
+      valor_pago: valorPago,
+      saldo_parcela: Math.max(0, valorParcela - valorPago),
+    };
+  });
+}
+
 export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceberProps) {
   const { confirm, toast } = useAppMessages();
   const [parcelas, setParcelas] = useState(initialParcelas);
+  const [parcelasPagas, setParcelasPagas] = useState<ParcelaAberta[]>([]);
+  const [amostra, setAmostra] = useState<AmostraReceber>("receber");
   const [paginaParcelas, setPaginaParcelas] = useState(1);
   const [showPagamento, setShowPagamento] = useState(false);
   const [showApagarTudo, setShowApagarTudo] = useState(false);
@@ -70,25 +94,63 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
   const [error, setError] = useState<string | null>(null);
   const [comprovante, setComprovante] = useState<ComprovantePagamentoData | null>(null);
   const [showComprovante, setShowComprovante] = useState(false);
+  const [carregandoPagas, setCarregandoPagas] = useState(false);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     setParcelas(initialParcelas);
   }, [initialParcelas]);
 
+  const fetchParcelasPagas = useCallback(async () => {
+    setCarregandoPagas(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await selectParcelasPorStatusComCliente(
+        supabase,
+        "pago",
+        "desc"
+      );
+      if (error) {
+        setParcelasPagas([]);
+        return;
+      }
+      setParcelasPagas(mapParcelas(data));
+    } finally {
+      setCarregandoPagas(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchParcelasPagas();
+  }, [fetchParcelasPagas]);
+
+  const totalReceber = useMemo(
+    () => parcelas.reduce((sum, p) => sum + p.saldo_parcela, 0),
+    [parcelas]
+  );
+  const totalPago = useMemo(
+    () => parcelasPagas.reduce((sum, p) => sum + Number(p.valor_pago ?? p.valor_parcela), 0),
+    [parcelasPagas]
+  );
+
+  const listaAtual = amostra === "receber" ? parcelas : parcelasPagas;
   const parcelasPagaveis = filtrarParcelasPagaveis(parcelas);
   const parcelaSelecionada = parcelasPagaveis.find((p) => p.id === parcelaSelecionadaId) ?? null;
 
   const totalPaginas = Math.max(
     1,
-    Math.ceil(parcelas.length / LIMITE_PARCELAS_PAGINA)
+    Math.ceil(listaAtual.length / LIMITE_PARCELAS_PAGINA)
   );
   const paginaAtual = Math.min(paginaParcelas, totalPaginas);
   const inicioParcelas = (paginaAtual - 1) * LIMITE_PARCELAS_PAGINA;
-  const parcelasVisiveis = parcelas.slice(
+  const parcelasVisiveis = listaAtual.slice(
     inicioParcelas,
     inicioParcelas + LIMITE_PARCELAS_PAGINA
   );
+
+  useEffect(() => {
+    setPaginaParcelas(1);
+  }, [amostra]);
 
   useEffect(() => {
     if (paginaParcelas > totalPaginas) {
@@ -167,6 +229,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
           .filter(Boolean) as ParcelaAberta[]
       );
 
+      void fetchParcelasPagas();
       invalidateAfterFinanceiroChange();
       fecharPagamento();
     });
@@ -240,9 +303,9 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
       {!showComprovante && (
       <Card>
         <CardHeader className="flex flex-col gap-3 py-3 px-4 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-base">Crediário — A Receber</CardTitle>
+          <CardTitle className="text-base">Crediário</CardTitle>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            {parcelas.length > 0 && (
+            {amostra === "receber" && parcelas.length > 0 && (
               <Button
                 type="button"
                 size="sm"
@@ -255,7 +318,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                 Apagar tudo
               </Button>
             )}
-            {parcelasPagaveis.length > 0 && (
+            {amostra === "receber" && parcelasPagaveis.length > 0 && (
               <Button
                 size="sm"
                 className="h-10 w-full sm:w-auto"
@@ -268,29 +331,95 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
             )}
           </div>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
-          {parcelas.length === 0 ? (
-            <p className="text-brand-black/50 py-6 text-center text-sm">
-              Nenhuma parcela em aberto. 🎉
+        <CardContent className="space-y-3 px-4 pb-4">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setAmostra("receber")}
+              className={cn(
+                "rounded-xl border px-3 py-2.5 text-left transition-colors touch-manipulation",
+                amostra === "receber"
+                  ? "border-brand-red bg-brand-red/10"
+                  : "border-brand-black/10 bg-white hover:bg-brand-cream/60"
+              )}
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-red">
+                A receber
+              </p>
+              <p className="mt-0.5 text-xl font-bold tabular-nums text-brand-red">
+                {formatCurrency(totalReceber)}
+              </p>
+              <p className="text-[10px] text-brand-black/45">
+                {parcelas.length === 0
+                  ? "Nenhuma"
+                  : `${parcelas.length} parcela${parcelas.length > 1 ? "s" : ""}`}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAmostra("pago")}
+              className={cn(
+                "rounded-xl border px-3 py-2.5 text-left transition-colors touch-manipulation",
+                amostra === "pago"
+                  ? "border-green-600 bg-green-50"
+                  : "border-brand-black/10 bg-white hover:bg-brand-cream/60"
+              )}
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-green-700">
+                Pago
+              </p>
+              <p
+                className={cn(
+                  "mt-0.5 text-xl font-bold tabular-nums text-green-700",
+                  carregandoPagas && "animate-pulse"
+                )}
+              >
+                {formatCurrency(totalPago)}
+              </p>
+              <p className="text-[10px] text-brand-black/45">
+                {parcelasPagas.length === 0
+                  ? "Nenhuma"
+                  : `${parcelasPagas.length} parcela${parcelasPagas.length > 1 ? "s" : ""}`}
+              </p>
+            </button>
+          </div>
+
+          {listaAtual.length === 0 ? (
+            <p className="py-6 text-center text-sm text-brand-black/50">
+              {amostra === "pago"
+                ? "Nenhuma parcela paga ainda."
+                : "Nenhuma parcela em aberto. 🎉"}
             </p>
           ) : (
             <>
               <div className="rounded-xl border border-brand-red/15 bg-gradient-to-br from-brand-red/[0.08] via-brand-cream/70 to-brand-cream shadow-sm shadow-brand-red/[0.05] [&>div]:border-0 [&>div]:rounded-none">
-                <Table className="text-xs bg-transparent">
+                <Table className="bg-transparent text-xs">
                   <TableHeader className="bg-brand-red/[0.06]">
                     <TableRow>
                       <TableHead className="h-8 px-2 py-1 text-[10px]">Cliente</TableHead>
                       <TableHead className="h-8 px-2 py-1 text-[10px]">Parcela</TableHead>
                       <TableHead className="h-8 px-2 py-1 text-[10px]">Vencimento</TableHead>
                       <TableHead className="h-8 px-2 py-1 text-[10px]">Valor</TableHead>
-                      <TableHead className="h-8 px-2 py-1 text-[10px]">Já pago</TableHead>
-                      <TableHead className="h-8 px-2 py-1 text-[10px]">Falta</TableHead>
-                      <TableHead className="h-8 px-2 py-1 text-[10px] text-right">Ação</TableHead>
+                      <TableHead className="h-8 px-2 py-1 text-[10px]">
+                        {amostra === "pago" ? "Pago" : "Já pago"}
+                      </TableHead>
+                      {amostra === "receber" ? (
+                        <>
+                          <TableHead className="h-8 px-2 py-1 text-[10px]">Falta</TableHead>
+                          <TableHead className="h-8 px-2 py-1 text-right text-[10px]">
+                            Ação
+                          </TableHead>
+                        </>
+                      ) : (
+                        <TableHead className="h-8 px-2 py-1 text-[10px]">Status</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody className="bg-transparent">
                     {parcelasVisiveis.map((p) => {
-                      const podePagar = parcelasPagaveis.some((pp) => pp.id === p.id);
+                      const podePagar =
+                        amostra === "receber" &&
+                        parcelasPagaveis.some((pp) => pp.id === p.id);
                       return (
                         <TableRow
                           key={p.id}
@@ -298,8 +427,8 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                         >
                           <TableCell
                             className={cn(
-                              "px-2 py-2 align-middle max-w-[100px] truncate",
-                              !podePagar && "text-brand-black/50"
+                              "max-w-[100px] truncate px-2 py-2 align-middle",
+                              amostra === "receber" && !podePagar && "text-brand-black/50"
                             )}
                           >
                             {nomeClienteDaVenda(p.vendas)}
@@ -307,27 +436,29 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                           <TableCell
                             className={cn(
                               "px-2 py-2 align-middle",
-                              !podePagar && "text-brand-black/50"
+                              amostra === "receber" && !podePagar && "text-brand-black/50"
                             )}
                           >
                             <div className="leading-tight">
                               <span>
                                 {p.numero_parcela}/{p.vendas?.parcelas ?? "—"}
                               </span>
-                              <span
-                                className={cn(
-                                  "block text-[9px] text-brand-black/50",
-                                  podePagar && "invisible"
-                                )}
-                              >
-                                Aguardando anterior
-                              </span>
+                              {amostra === "receber" && (
+                                <span
+                                  className={cn(
+                                    "block text-[9px] text-brand-black/50",
+                                    podePagar && "invisible"
+                                  )}
+                                >
+                                  Aguardando anterior
+                                </span>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell
                             className={cn(
                               "px-2 py-2 align-middle",
-                              !podePagar && "text-brand-black/50"
+                              amostra === "receber" && !podePagar && "text-brand-black/50"
                             )}
                           >
                             {formatDate(p.data_vencimento)}
@@ -335,7 +466,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                           <TableCell
                             className={cn(
                               "px-2 py-2 align-middle tabular-nums",
-                              !podePagar && "text-brand-black/50"
+                              amostra === "receber" && !podePagar && "text-brand-black/50"
                             )}
                           >
                             {formatCurrency(Number(p.valor_parcela))}
@@ -343,28 +474,40 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                           <TableCell
                             className={cn(
                               "px-2 py-2 align-middle tabular-nums",
-                              !podePagar && "text-brand-black/50"
+                              amostra === "pago"
+                                ? "font-medium text-green-700"
+                                : !podePagar && "text-brand-black/50"
                             )}
                           >
                             {formatCurrency(Number(p.valor_pago ?? 0))}
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-middle font-medium text-brand-red tabular-nums">
-                            {formatCurrency(p.saldo_parcela)}
-                          </TableCell>
-                          <TableCell className="px-2 py-2 align-middle text-right w-10">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-brand-red hover:bg-brand-red/10 touch-manipulation"
-                              onClick={() => handleExcluirParcela(p)}
-                              disabled={pending}
-                              title="Excluir parcela"
-                              aria-label="Excluir parcela"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </TableCell>
+                          {amostra === "receber" ? (
+                            <>
+                              <TableCell className="px-2 py-2 align-middle font-medium tabular-nums text-brand-red">
+                                {formatCurrency(p.saldo_parcela)}
+                              </TableCell>
+                              <TableCell className="w-10 px-2 py-2 text-right align-middle">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-brand-red touch-manipulation hover:bg-brand-red/10"
+                                  onClick={() => handleExcluirParcela(p)}
+                                  disabled={pending}
+                                  title="Excluir parcela"
+                                  aria-label="Excluir parcela"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </TableCell>
+                            </>
+                          ) : (
+                            <TableCell className="px-2 py-2 align-middle">
+                              <Badge variant="success" className="px-1.5 py-0 text-[10px]">
+                                Paga
+                              </Badge>
+                            </TableCell>
+                          )}
                         </TableRow>
                       );
                     })}
@@ -372,7 +515,7 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                 </Table>
               </div>
 
-              {parcelas.length > LIMITE_PARCELAS_PAGINA && (
+              {listaAtual.length > LIMITE_PARCELAS_PAGINA && (
                 <ListaPaginacao
                   paginaAtual={paginaAtual}
                   totalPaginas={totalPaginas}
@@ -409,20 +552,16 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
             />
 
             {parcelaSelecionada && (
-              <div className="rounded-xl bg-brand-cream/50 p-4 text-sm space-y-1">
+              <div className="rounded-lg bg-brand-cream/80 p-3 text-sm space-y-1">
                 <p>
-                  <strong>Cliente:</strong>{" "}
+                  <span className="text-brand-black/60">Cliente:</span>{" "}
                   {nomeClienteDaVenda(parcelaSelecionada.vendas)}
                 </p>
                 <p>
-                  <strong>Vencimento:</strong> {formatDate(parcelaSelecionada.data_vencimento)}
-                </p>
-                <p>
-                  <strong>Falta nesta parcela:</strong>{" "}
-                  {formatCurrency(parcelaSelecionada.saldo_parcela)}
-                </p>
-                <p className="text-brand-black/60 text-xs pt-1">
-                  Se pagar mais, o excedente abate as próximas parcelas automaticamente.
+                  <span className="text-brand-black/60">Saldo da parcela:</span>{" "}
+                  <strong className="text-brand-red">
+                    {formatCurrency(parcelaSelecionada.saldo_parcela)}
+                  </strong>
                 </p>
               </div>
             )}
@@ -433,75 +572,63 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                 id="valor_pago"
                 value={valorPago}
                 onChange={setValorPago}
-                placeholder="R$0,01"
-                disabled={!parcelaSelecionada}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="obs">Como pagou? (observação)</Label>
+              <Label htmlFor="obs_pag">Observação (opcional)</Label>
               <Textarea
-                id="obs"
+                id="obs_pag"
                 value={obs}
                 onChange={(e) => setObs(e.target.value)}
-                placeholder="Ex: Pix, dinheiro..."
-                rows={3}
-                disabled={!parcelaSelecionada}
+                rows={2}
               />
             </div>
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
-            <Button
-              onClick={confirmarPagamento}
-              disabled={pending || !parcelaSelecionada}
-              className="w-full"
-            >
-              {pending ? "Salvando..." : "Confirmar e Gerar Comprovante"}
-            </Button>
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={fecharPagamento}>
+                Cancelar
+              </Button>
+              <Button onClick={confirmarPagamento} disabled={pending}>
+                {pending ? "Registrando..." : "Confirmar Pagamento"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={showApagarTudo}
-        onOpenChange={(open) => {
-          if (!open) fecharApagarTudo();
-        }}
-      >
+      <Dialog open={showApagarTudo} onOpenChange={(open) => !open && fecharApagarTudo()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Apagar tudo a receber</DialogTitle>
             <DialogDescription>
-              Isso apaga todas as vendas com parcelas em aberto do crediário.
+              Isso apaga todas as vendas com parcelas em aberto e devolve o estoque.
               Não dá para desfazer. Digite a senha de login para confirmar.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-              {parcelas.length} parcela(s) em aberto serão removidas.
-            </div>
-
             <div className="space-y-2">
-              <Label htmlFor="senha_apagar_tudo">Senha de login</Label>
+              <Label htmlFor="senha_apagar_tudo">Senha</Label>
               <div className="relative">
                 <Input
                   id="senha_apagar_tudo"
                   type={mostrarSenha ? "text" : "password"}
                   value={senhaApagar}
                   onChange={(e) => setSenhaApagar(e.target.value)}
-                  className="pr-11"
-                  autoComplete="current-password"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") confirmarApagarTudo();
                   }}
+                  autoComplete="current-password"
+                  className="pr-10"
                 />
                 <button
                   type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-black/50"
                   onClick={() => setMostrarSenha((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-brand-black/45 hover:text-brand-red"
-                  aria-label={mostrarSenha ? "Ocultar senha" : "Ver senha"}
+                  tabIndex={-1}
                 >
                   {mostrarSenha ? (
                     <EyeOff className="h-4 w-4" />
@@ -514,19 +641,13 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
 
             {erroApagar && <p className="text-sm text-red-600">{erroApagar}</p>}
 
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={fecharApagarTudo}
-                disabled={pending}
-              >
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={fecharApagarTudo}>
                 Cancelar
               </Button>
               <Button
                 type="button"
-                className="w-full bg-red-700 hover:bg-red-800"
+                variant="destructive"
                 onClick={confirmarApagarTudo}
                 disabled={pending || !senhaApagar.trim()}
               >
