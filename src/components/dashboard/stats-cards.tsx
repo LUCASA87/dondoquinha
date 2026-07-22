@@ -127,7 +127,6 @@ export function StatsCards({
   const mesPadrao = intervaloDoMes(mesAtualInput());
   const [dataInicio, setDataInicio] = useState(mesPadrao.inicio);
   const [dataFim, setDataFim] = useState(mesPadrao.fim);
-  const [mesFiltroPagar, setMesFiltroPagar] = useState(mesAtualInput);
   const [totalAPagarAbertoMes, setTotalAPagarAbertoMes] = useState(0);
   const [totalAPagarPagasMes, setTotalAPagarPagasMes] = useState(0);
   const [qtdAbertoMes, setQtdAbertoMes] = useState(0);
@@ -180,11 +179,13 @@ export function StatsCards({
     setTotalAReceber(total);
   }, []);
 
-  const fetchAPagarMes = useCallback(async (mesAno: string) => {
+  const fetchAPagarPeriodo = useCallback(async (inicioRaw: string, fimRaw: string) => {
+    const { inicio, fim } = normalizarIntervalo(inicioRaw, fimRaw);
+    if (!inicio || !fim) return;
+
     setCarregandoPagar(true);
     try {
       const supabase = createClient();
-      const { inicio, fim } = intervaloDoMes(mesAno);
       const { data } = await supabase
         .from("contas_a_pagar")
         .select("valor, status, data_vencimento, data_pagamento");
@@ -303,29 +304,24 @@ export function StatsCards({
     setTotalAReceber(initialAReceber);
   }, [initialAReceber]);
 
-  useEffect(() => {
-    if (modoFiltro === "mes") {
-      const { inicio, fim } = intervaloDoMes(mesFiltro);
-      void fetchResumoPeriodo(inicio, fim);
-      return;
-    }
-    void fetchResumoPeriodo(dataInicio, dataFim);
-  }, [modoFiltro, mesFiltro, dataInicio, dataFim, fetchResumoPeriodo]);
+  const intervaloAtivo = useCallback(() => {
+    if (modoFiltro === "mes") return intervaloDoMes(mesFiltro);
+    return normalizarIntervalo(dataInicio, dataFim);
+  }, [modoFiltro, mesFiltro, dataInicio, dataFim]);
 
   useEffect(() => {
-    void fetchAPagarMes(mesFiltroPagar);
-  }, [mesFiltroPagar, fetchAPagarMes]);
+    const { inicio, fim } = intervaloAtivo();
+    void fetchResumoPeriodo(inicio, fim);
+    void fetchAPagarPeriodo(inicio, fim);
+  }, [intervaloAtivo, fetchResumoPeriodo, fetchAPagarPeriodo]);
 
   useEffect(() => {
     const supabase = createClient();
 
     const refreshMes = () => {
-      if (modoFiltro === "mes") {
-        const { inicio, fim } = intervaloDoMes(mesFiltro);
-        void fetchResumoPeriodo(inicio, fim);
-        return;
-      }
-      void fetchResumoPeriodo(dataInicio, dataFim);
+      const { inicio, fim } = intervaloAtivo();
+      void fetchResumoPeriodo(inicio, fim);
+      void fetchAPagarPeriodo(inicio, fim);
     };
 
     const channelEstoque = supabase
@@ -380,7 +376,10 @@ export function StatsCards({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "contas_a_pagar" },
-        () => void fetchAPagarMes(mesFiltroPagar)
+        () => {
+          const { inicio, fim } = intervaloAtivo();
+          void fetchAPagarPeriodo(inicio, fim);
+        }
       )
       .subscribe();
 
@@ -394,24 +393,16 @@ export function StatsCards({
   }, [
     fetchEstoque,
     fetchAReceber,
-    fetchAPagarMes,
+    fetchAPagarPeriodo,
     fetchResumoPeriodo,
-    modoFiltro,
-    mesFiltro,
-    dataInicio,
-    dataFim,
-    mesFiltroPagar,
+    intervaloAtivo,
   ]);
 
-  const periodoAtivo =
-    modoFiltro === "mes"
-      ? intervaloDoMes(mesFiltro)
-      : normalizarIntervalo(dataInicio, dataFim);
+  const periodoAtivo = intervaloAtivo();
   const periodoLabel =
     modoFiltro === "mes"
       ? formatMesAno(`${mesFiltro}-01`)
       : labelPeriodo(periodoAtivo.inicio, periodoAtivo.fim);
-  const mesLabelPagar = formatMesAno(`${mesFiltroPagar}-01`);
 
   const previstoCards: StatItem[] = [
     {
@@ -650,22 +641,13 @@ export function StatsCards({
             )}
           >
             <div className="space-y-2.5 px-3 py-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <div className="shrink-0 rounded-lg bg-brand-red/10 p-1.5">
-                    <Receipt className="h-3.5 w-3.5 text-brand-red" />
-                  </div>
-                  <p className="truncate text-[10px] font-medium text-brand-black/55">
-                    A pagar · {mesLabelPagar}
-                  </p>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <div className="shrink-0 rounded-lg bg-brand-red/10 p-1.5">
+                  <Receipt className="h-3.5 w-3.5 text-brand-red" />
                 </div>
-                <Input
-                  aria-label="Filtrar a pagar por mês"
-                  type="month"
-                  value={mesFiltroPagar}
-                  onChange={(e) => setMesFiltroPagar(e.target.value)}
-                  className="h-7 w-[8.25rem] shrink-0 px-1.5 text-[10px]"
-                />
+                <p className="truncate text-[10px] font-medium text-brand-black/55">
+                  A pagar · {periodoLabel}
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-xl border border-brand-red/15 bg-brand-red/[0.04] px-2.5 py-2">
