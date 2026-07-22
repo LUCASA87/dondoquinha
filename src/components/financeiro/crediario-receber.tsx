@@ -532,25 +532,35 @@ export function CrediarioReceber({ parcelas: initialParcelas }: CrediarioReceber
                             </TableCell>
                           ) : (
                             <TableCell className="px-2 py-2 align-middle">
-                              <Badge variant="success" className="px-1.5 py-0 text-[10px]">
-                                Paga
-                              </Badge>
+                              <button
+                                type="button"
+                                onClick={() => abrirEditarStatus(p)}
+                                disabled={pending}
+                                className="touch-manipulation"
+                                title="Editar status"
+                              >
+                                <Badge
+                                  variant="success"
+                                  className="px-1.5 py-0 text-[10px] underline-offset-2 hover:underline"
+                                >
+                                  Paga
+                                </Badge>
+                              </button>
                             </TableCell>
                           )}
-                          <TableCell className="w-20 px-2 py-2 text-right align-middle">
+                          <TableCell className="w-24 px-2 py-2 text-right align-middle">
                             <div className="flex items-center justify-end gap-0.5">
                               {amostra === "pago" && (
                                 <Button
                                   type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 touch-manipulation hover:bg-brand-cream"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-2 text-[10px] touch-manipulation"
                                   onClick={() => abrirEditarStatus(p)}
                                   disabled={pending}
-                                  title="Editar status"
-                                  aria-label="Editar status"
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
+                                  Editar
                                 </Button>
                               )}
                               {amostra === "receber" && (
