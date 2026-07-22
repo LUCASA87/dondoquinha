@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CalendarDays, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,17 +14,6 @@ interface StatsCardsProps {
   totalAPagar: number;
   totalAReceber: number;
   isLoading?: boolean;
-}
-
-interface StatItem {
-  title: string;
-  value: string;
-  description: string;
-  icon: LucideIcon;
-  color: string;
-  bg: string;
-  accent: string;
-  valueColor?: string;
 }
 
 type ModoFiltroFinanceiro = "mes" | "periodo";
@@ -69,38 +57,6 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function StatCard({ item, isLoading }: { item: StatItem; isLoading?: boolean }) {
-  return (
-    <Card
-      className={cn(
-        "overflow-hidden rounded-lg border-l-2 bg-gradient-to-br from-white to-brand-cream/25",
-        item.accent,
-        isLoading && "opacity-80"
-      )}
-    >
-      <div className="flex items-center gap-1.5 px-2 py-1.5">
-        <div className={cn("shrink-0 rounded-md p-1", item.bg)}>
-          <item.icon className={cn("h-3 w-3", item.color)} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[9px] font-medium leading-tight text-brand-black/50">
-            {item.title}
-          </p>
-          <p
-            className={cn(
-              "text-[13px] font-bold tabular-nums tracking-tight leading-tight",
-              item.valueColor ?? "text-brand-black",
-              isLoading && "animate-pulse"
-            )}
-          >
-            {item.value}
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 export function StatsCards({
   initialStats,
   totalAReceber: initialAReceber,
@@ -115,7 +71,6 @@ export function StatsCards({
   const [dataFim, setDataFim] = useState(mesPadrao.fim);
   const [totalAPagarAbertoMes, setTotalAPagarAbertoMes] = useState(0);
   const [totalAPagarPagasMes, setTotalAPagarPagasMes] = useState(0);
-  const [aEntrarMes, setAEntrarMes] = useState(0);
   const [brutoVendasMes, setBrutoVendasMes] = useState(0);
   const [lucroVendasMes, setLucroVendasMes] = useState(0);
   const [recebidoMes, setRecebidoMes] = useState(0);
@@ -214,33 +169,18 @@ export function StatsCards({
     try {
       const supabase = createClient();
 
-      const [{ data: parcelas }, { data: itens }, { data: pagamentos }] =
-        await Promise.all([
-          supabase
-            .from("parcelas_vendas")
-            .select("valor_parcela, valor_pago, data_vencimento")
-            .lte("data_vencimento", fim),
-          supabase
-            .from("venda_itens")
-            .select("quantidade, preco_unitario, preco_custo, vendas!inner(data_venda)")
-            .gte("vendas.data_venda", inicio)
-            .lte("vendas.data_venda", fim),
-          supabase
-            .from("pagamentos_crediario")
-            .select("valor_pago, data_pagamento")
-            .gte("data_pagamento", inicio)
-            .lte("data_pagamento", fim),
-        ]);
-
-      let totalEntrar = 0;
-      for (const p of parcelas ?? []) {
-        const saldo = Number(p.valor_parcela) - Number(p.valor_pago ?? 0);
-        if (saldo <= 0.001) continue;
-        if (p.data_vencimento <= fim) {
-          totalEntrar += saldo;
-        }
-      }
-      setAEntrarMes(totalEntrar);
+      const [{ data: itens }, { data: pagamentos }] = await Promise.all([
+        supabase
+          .from("venda_itens")
+          .select("quantidade, preco_unitario, preco_custo, vendas!inner(data_venda)")
+          .gte("vendas.data_venda", inicio)
+          .lte("vendas.data_venda", fim),
+        supabase
+          .from("pagamentos_crediario")
+          .select("valor_pago, data_pagamento")
+          .gte("data_pagamento", inicio)
+          .lte("data_pagamento", fim),
+      ]);
 
       let bruto = 0;
       let lucro = 0;
@@ -374,17 +314,6 @@ export function StatsCards({
 
   const custoVendasMes = Math.max(0, brutoVendasMes - lucroVendasMes);
   const liquidoMes = lucroVendasMes - totalAPagarPagasMes;
-
-  const aEntrarCard: StatItem = {
-    title: `A entrar · ${modoFiltro === "mes" ? periodoLabel : formatDate(periodoAtivo.fim)}`,
-    value: formatCurrency(aEntrarMes),
-    description: "",
-    icon: CalendarDays,
-    color: "text-green-700",
-    bg: "bg-green-50",
-    accent: "border-l-green-600",
-    valueColor: "text-green-700",
-  };
 
   const valorBrutoEstoque = stats.totalVenda;
 
@@ -589,13 +518,6 @@ export function StatsCards({
             </div>
           </div>
         </Card>
-
-        <div className="mt-1.5">
-          <StatCard
-            item={aEntrarCard}
-            isLoading={isLoading || carregandoMes}
-          />
-        </div>
 
         <div className="mt-1.5 grid grid-cols-2 gap-1">
           <Card
