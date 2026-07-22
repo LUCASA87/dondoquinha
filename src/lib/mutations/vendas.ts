@@ -1,7 +1,11 @@
 import { montarComprovanteVenda } from "@/lib/comprovante-venda-data";
 import { nomeClienteDaVenda } from "@/lib/cliente-venda-nome";
 import { runDb, mapDbError, dbError } from "@/lib/db/helpers";
-import { baixarEstoqueVenda, validarEstoqueVenda } from "@/lib/db/estoque-venda";
+import {
+  baixarEstoqueVenda,
+  devolverEstoqueVenda,
+  validarEstoqueVenda,
+} from "@/lib/db/estoque-venda";
 import { formatItemNome } from "@/lib/format";
 import { validarDatasParcelas } from "@/lib/parcelas-datas";
 import { invalidateAfterVendasChange } from "@/lib/queries/page-cache";
@@ -206,6 +210,37 @@ export async function updateVendaStatus(
           if (error) return dbError(error.message);
         }
       }
+
+      return { success: true as const };
+    });
+
+    if ("success" in result && result.success) {
+      invalidateAfterVendasChange();
+    }
+    return result;
+  } catch (err) {
+    return mapDbError(err);
+  }
+}
+
+export async function deleteVenda(vendaId: string) {
+  try {
+    const result = await runDb(async (supabase) => {
+      const { data: venda, error: vendaErr } = await supabase
+        .from("vendas")
+        .select("id")
+        .eq("id", vendaId)
+        .single();
+
+      if (vendaErr || !venda) {
+        return dbError(vendaErr?.message ?? "Venda não encontrada.");
+      }
+
+      const devolucao = await devolverEstoqueVenda(supabase, vendaId);
+      if ("error" in devolucao) return devolucao;
+
+      const { error } = await supabase.from("vendas").delete().eq("id", vendaId);
+      if (error) return dbError(error.message);
 
       return { success: true as const };
     });

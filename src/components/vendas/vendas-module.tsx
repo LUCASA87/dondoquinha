@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useRef } from "react";
-import { Plus, Minus, Pencil, ShoppingBag } from "lucide-react";
+import { Plus, Minus, Pencil, ShoppingBag, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +35,7 @@ import { ComprovanteVenda } from "@/components/vendas/comprovante-venda";
 import { SelecaoBotoes, OPCOES_PARCELAS } from "@/components/ui/selecao-botoes";
 import { InputMoeda } from "@/components/ui/input-moeda";
 import { useAppMessages } from "@/components/ui/app-messages";
-import { createVenda, updateVendaStatus } from "@/lib/mutations/vendas";
+import { createVenda, deleteVenda, updateVendaStatus } from "@/lib/mutations/vendas";
 import { mutationError } from "@/lib/db/helpers";
 import { formatCurrency, formatDate, formatItemNome, formatItemNomeInput } from "@/lib/format";
 import { nomeClienteDaVenda } from "@/lib/cliente-venda-nome";
@@ -77,7 +77,7 @@ function labelProdutoSelecionado(p: Produto) {
 }
 
 export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasModuleProps) {
-  const { toast } = useAppMessages();
+  const { confirm, toast } = useAppMessages();
   const [clienteId, setClienteId] = useState("");
   const [parcelas, setParcelas] = useState(1);
   const [datasVencimento, setDatasVencimento] = useState<string[]>(() =>
@@ -117,6 +117,28 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
       setVendaSituacao(null);
       await onRefresh();
       toast("Situação da compra atualizada.", "success");
+    });
+  }
+
+  async function handleExcluirVenda(venda: Venda) {
+    const ok = await confirm({
+      title: "Excluir venda",
+      message: `Excluir a venda de ${nomeClienteDaVenda(venda)} (${formatCurrency(Number(venda.valor_total))})? O estoque volta e o crediário dessa compra some. Não dá para desfazer.`,
+      confirmLabel: "Excluir",
+      variant: "danger",
+    });
+    if (!ok) return;
+
+    startTransition(async () => {
+      const result = await deleteVenda(venda.id);
+      const err = mutationError(result);
+      if (err) {
+        toast(err, "error");
+        return;
+      }
+      if (vendaSituacao?.id === venda.id) setVendaSituacao(null);
+      await onRefresh();
+      toast("Venda excluída. Estoque devolvido.", "success");
     });
   }
 
@@ -611,7 +633,7 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
           Vendas Recentes
         </h2>
         <p className="mb-4 text-sm text-brand-black/50">
-          Últimas 5 vendas. Toque no lápis para ajustar a situação se errou.
+          Últimas 5 vendas. Lápis muda a situação; lixeira exclui a venda.
         </p>
         {vendas.length === 0 ? (
           <p className="text-brand-black/50">Nenhuma venda registrada.</p>
@@ -624,7 +646,7 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
                 <TableHead>Parcelas</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
-                <TableHead className="w-12" />
+                <TableHead className="w-24" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -642,15 +664,28 @@ export function VendasModule({ clientes, produtos, vendas, onRefresh }: VendasMo
                     {formatCurrency(Number(v.valor_total))}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Editar situação"
-                      onClick={() => abrirEditarSituacao(v)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Editar situação"
+                        onClick={() => abrirEditarSituacao(v)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Excluir venda"
+                        className="text-brand-red hover:text-brand-red"
+                        onClick={() => void handleExcluirVenda(v)}
+                        disabled={pending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
