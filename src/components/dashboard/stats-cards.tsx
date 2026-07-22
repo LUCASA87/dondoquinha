@@ -14,7 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { formatCurrency, formatMesAno } from "@/lib/format";
+import { formatCurrency, formatDate, formatMesAno } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { DashboardStats } from "@/types/database";
 
@@ -36,6 +36,8 @@ interface StatItem {
   valueColor?: string;
 }
 
+type ModoFiltroFinanceiro = "mes" | "periodo";
+
 function mesAtualInput(): string {
   const agora = new Date();
   const y = agora.getFullYear();
@@ -51,6 +53,17 @@ function intervaloDoMes(mesAno: string): { inicio: string; fim: string } {
     inicio: `${y}-${mm}-01`,
     fim: `${y}-${mm}-${String(ultimoDia).padStart(2, "0")}`,
   };
+}
+
+function normalizarIntervalo(inicio: string, fim: string): { inicio: string; fim: string } {
+  if (!inicio || !fim) return { inicio, fim };
+  return inicio <= fim ? { inicio, fim } : { inicio: fim, fim: inicio };
+}
+
+function labelPeriodo(inicio: string, fim: string): string {
+  if (!inicio || !fim) return "—";
+  const { inicio: a, fim: b } = normalizarIntervalo(inicio, fim);
+  return `${formatDate(a)} – ${formatDate(b)}`;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -109,7 +122,11 @@ export function StatsCards({
   const [stats, setStats] = useState(initialStats);
   const [totalAReceber, setTotalAReceber] = useState(initialAReceber);
   const [totalContasPagas, setTotalContasPagas] = useState(0);
+  const [modoFiltro, setModoFiltro] = useState<ModoFiltroFinanceiro>("mes");
   const [mesFiltro, setMesFiltro] = useState(mesAtualInput);
+  const mesPadrao = intervaloDoMes(mesAtualInput());
+  const [dataInicio, setDataInicio] = useState(mesPadrao.inicio);
+  const [dataFim, setDataFim] = useState(mesPadrao.fim);
   const [mesFiltroPagar, setMesFiltroPagar] = useState(mesAtualInput);
   const [totalAPagarAbertoMes, setTotalAPagarAbertoMes] = useState(0);
   const [totalAPagarPagasMes, setTotalAPagarPagasMes] = useState(0);
@@ -216,11 +233,13 @@ export function StatsCards({
     }
   }, []);
 
-  const fetchResumoMes = useCallback(async (mesAno: string) => {
+  const fetchResumoPeriodo = useCallback(async (inicioRaw: string, fimRaw: string) => {
+    const { inicio, fim } = normalizarIntervalo(inicioRaw, fimRaw);
+    if (!inicio || !fim) return;
+
     setCarregandoMes(true);
     try {
       const supabase = createClient();
-      const { inicio, fim } = intervaloDoMes(mesAno);
 
       const [{ data: parcelas }, { data: itens }, { data: pagamentos }] =
         await Promise.all([
@@ -245,7 +264,6 @@ export function StatsCards({
       for (const p of parcelas ?? []) {
         const saldo = Number(p.valor_parcela) - Number(p.valor_pago ?? 0);
         if (saldo <= 0.001) continue;
-        // No mês: vence no mês OU já está atrasada (venceu antes)
         if (p.data_vencimento <= fim) {
           totalEntrar += saldo;
           qtd += 1;
@@ -286,8 +304,13 @@ export function StatsCards({
   }, [initialAReceber]);
 
   useEffect(() => {
-    void fetchResumoMes(mesFiltro);
-  }, [mesFiltro, fetchResumoMes]);
+    if (modoFiltro === "mes") {
+      const { inicio, fim } = intervaloDoMes(mesFiltro);
+      void fetchResumoPeriodo(inicio, fim);
+      return;
+    }
+    void fetchResumoPeriodo(dataInicio, dataFim);
+  }, [modoFiltro, mesFiltro, dataInicio, dataFim, fetchResumoPeriodo]);
 
   useEffect(() => {
     void fetchAPagarMes(mesFiltroPagar);
@@ -296,7 +319,14 @@ export function StatsCards({
   useEffect(() => {
     const supabase = createClient();
 
-    const refreshMes = () => void fetchResumoMes(mesFiltro);
+    const refreshMes = () => {
+      if (modoFiltro === "mes") {
+        const { inicio, fim } = intervaloDoMes(mesFiltro);
+        void fetchResumoPeriodo(inicio, fim);
+        return;
+      }
+      void fetchResumoPeriodo(dataInicio, dataFim);
+    };
 
     const channelEstoque = supabase
       .channel("dashboard-produtos")
@@ -361,19 +391,36 @@ export function StatsCards({
       supabase.removeChannel(channelVendas);
       supabase.removeChannel(channelContas);
     };
-  }, [fetchEstoque, fetchAReceber, fetchAPagarMes, fetchResumoMes, mesFiltro, mesFiltroPagar]);
+  }, [
+    fetchEstoque,
+    fetchAReceber,
+    fetchAPagarMes,
+    fetchResumoPeriodo,
+    modoFiltro,
+    mesFiltro,
+    dataInicio,
+    dataFim,
+    mesFiltroPagar,
+  ]);
 
-  const mesLabel = formatMesAno(`${mesFiltro}-01`);
+  const periodoAtivo =
+    modoFiltro === "mes"
+      ? intervaloDoMes(mesFiltro)
+      : normalizarIntervalo(dataInicio, dataFim);
+  const periodoLabel =
+    modoFiltro === "mes"
+      ? formatMesAno(`${mesFiltro}-01`)
+      : labelPeriodo(periodoAtivo.inicio, periodoAtivo.fim);
   const mesLabelPagar = formatMesAno(`${mesFiltroPagar}-01`);
 
   const previstoCards: StatItem[] = [
     {
-      title: `A entrar até ${mesLabel}`,
+      title: `A entrar até ${modoFiltro === "mes" ? periodoLabel : formatDate(periodoAtivo.fim)}`,
       value: formatCurrency(aEntrarMes),
       description:
         qtdParcelasMes === 0
-          ? "Nenhuma parcela em aberto até este mês"
-          : `${qtdParcelasMes} parcela${qtdParcelasMes > 1 ? "s" : ""} (mês + atrasadas)`,
+          ? "Nenhuma parcela em aberto até esta data"
+          : `${qtdParcelasMes} parcela${qtdParcelasMes > 1 ? "s" : ""} (período + atrasadas)`,
       icon: CalendarDays,
       color: "text-green-700",
       bg: "bg-green-50",
@@ -381,9 +428,9 @@ export function StatsCards({
       valueColor: "text-green-700",
     },
     {
-      title: `Vendas em ${mesLabel}`,
+      title: `Vendas · ${periodoLabel}`,
       value: formatCurrency(brutoVendasMes),
-      description: "Total vendido no mês",
+      description: "Total vendido no período",
       icon: DollarSign,
       color: "text-brand-red",
       bg: "bg-brand-red/10",
@@ -391,9 +438,9 @@ export function StatsCards({
       valueColor: "text-brand-red",
     },
     {
-      title: `Lucro em ${mesLabel}`,
+      title: `Lucro · ${periodoLabel}`,
       value: formatCurrency(lucroVendasMes),
-      description: "Venda menos custo das vendas do mês",
+      description: "Venda menos custo no período",
       icon: TrendingUp,
       color: "text-green-700",
       bg: "bg-green-50",
@@ -435,23 +482,103 @@ export function StatsCards({
   return (
     <div className="space-y-4">
       <div>
-        <div className="mb-1.5 flex flex-wrap items-end justify-between gap-2">
-          <SectionLabel>Financeiro</SectionLabel>
-          <div className="flex items-center gap-2">
-            <Label
-              htmlFor="filtro_mes_entrar"
-              className="text-[10px] font-medium text-brand-black/55"
-            >
-              Mês
-            </Label>
-            <Input
-              id="filtro_mes_entrar"
-              type="month"
-              value={mesFiltro}
-              onChange={(e) => setMesFiltro(e.target.value)}
-              className="h-8 w-[9.5rem] px-2 text-xs"
-            />
+        <div className="mb-2 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SectionLabel>Financeiro</SectionLabel>
+            <div className="flex rounded-lg border border-brand-black/10 bg-white p-0.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setModoFiltro("mes");
+                  const { inicio, fim } = intervaloDoMes(mesFiltro);
+                  setDataInicio(inicio);
+                  setDataFim(fim);
+                }}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors",
+                  modoFiltro === "mes"
+                    ? "bg-brand-red text-white"
+                    : "text-brand-black/55 hover:bg-brand-cream"
+                )}
+              >
+                Mês
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModoFiltro("periodo");
+                  const { inicio, fim } = intervaloDoMes(mesFiltro);
+                  setDataInicio(inicio);
+                  setDataFim(fim);
+                }}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors",
+                  modoFiltro === "periodo"
+                    ? "bg-brand-red text-white"
+                    : "text-brand-black/55 hover:bg-brand-cream"
+                )}
+              >
+                Período
+              </button>
+            </div>
           </div>
+
+          {modoFiltro === "mes" ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Label
+                htmlFor="filtro_mes_entrar"
+                className="text-[10px] font-medium text-brand-black/55"
+              >
+                Mês
+              </Label>
+              <Input
+                id="filtro_mes_entrar"
+                type="month"
+                value={mesFiltro}
+                onChange={(e) => {
+                  const valor = e.target.value;
+                  setMesFiltro(valor);
+                  const { inicio, fim } = intervaloDoMes(valor);
+                  setDataInicio(inicio);
+                  setDataFim(fim);
+                }}
+                className="h-8 w-[9.5rem] px-2 text-xs"
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label
+                  htmlFor="filtro_data_inicio"
+                  className="text-[10px] font-medium text-brand-black/55"
+                >
+                  De
+                </Label>
+                <Input
+                  id="filtro_data_inicio"
+                  type="date"
+                  value={dataInicio}
+                  onChange={(e) => setDataInicio(e.target.value)}
+                  className="h-8 px-2 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label
+                  htmlFor="filtro_data_fim"
+                  className="text-[10px] font-medium text-brand-black/55"
+                >
+                  Até
+                </Label>
+                <Input
+                  id="filtro_data_fim"
+                  type="date"
+                  value={dataFim}
+                  onChange={(e) => setDataFim(e.target.value)}
+                  className="h-8 px-2 text-xs"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
@@ -477,7 +604,7 @@ export function StatsCards({
                   <Wallet className="h-3.5 w-3.5 text-green-700" />
                 </div>
                 <p className="truncate text-[10px] font-medium text-brand-black/55">
-                  Crediário · {mesLabel}
+                  Crediário · {periodoLabel}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -509,8 +636,8 @@ export function StatsCards({
                   </p>
                   <p className="text-[9px] text-brand-black/40">
                     {qtdRecebidoMes === 0
-                      ? "Neste mês"
-                      : `${qtdRecebidoMes} no mês`}
+                      ? "No período"
+                      : `${qtdRecebidoMes} no período`}
                   </p>
                 </div>
               </div>
