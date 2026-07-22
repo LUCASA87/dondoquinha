@@ -5,8 +5,6 @@ import {
   Package,
   TrendingUp,
   DollarSign,
-  Receipt,
-  Wallet,
   CalendarDays,
   type LucideIcon,
 } from "lucide-react";
@@ -68,9 +66,9 @@ function labelPeriodo(inicio: string, fim: string): string {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-1.5 mb-1.5">
-      <span className="h-0.5 w-3 rounded-full bg-brand-red" />
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-red">
+    <div className="mb-1 flex items-center gap-1">
+      <span className="h-0.5 w-2.5 rounded-full bg-brand-red" />
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-brand-red">
         {children}
       </p>
     </div>
@@ -81,33 +79,28 @@ function StatCard({ item, isLoading }: { item: StatItem; isLoading?: boolean }) 
   return (
     <Card
       className={cn(
-        "overflow-hidden rounded-xl border-l-2 bg-gradient-to-br from-white to-brand-cream/25 shadow-sm shadow-brand-black/[0.03]",
+        "overflow-hidden rounded-lg border-l-2 bg-gradient-to-br from-white to-brand-cream/25",
         item.accent,
         isLoading && "opacity-80"
       )}
     >
-      <div className="flex items-center gap-2.5 px-3 py-2.5">
-        <div className={cn("rounded-lg p-1.5 shrink-0", item.bg)}>
-          <item.icon className={cn("h-3.5 w-3.5", item.color)} />
+      <div className="flex items-center gap-1.5 px-2 py-1.5">
+        <div className={cn("shrink-0 rounded-md p-1", item.bg)}>
+          <item.icon className={cn("h-3 w-3", item.color)} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-medium text-brand-black/55 leading-tight truncate">
+          <p className="truncate text-[9px] font-medium leading-tight text-brand-black/50">
             {item.title}
           </p>
           <p
             className={cn(
-              "mt-0.5 text-[15px] font-bold tabular-nums tracking-tight leading-tight",
+              "text-[13px] font-bold tabular-nums tracking-tight leading-tight",
               item.valueColor ?? "text-brand-black",
               isLoading && "animate-pulse"
             )}
           >
             {item.value}
           </p>
-          {item.description ? (
-            <p className="mt-0.5 truncate text-[9px] leading-tight text-brand-black/40">
-              {item.description}
-            </p>
-          ) : null}
         </div>
       </div>
     </Card>
@@ -129,14 +122,10 @@ export function StatsCards({
   const [dataFim, setDataFim] = useState(mesPadrao.fim);
   const [totalAPagarAbertoMes, setTotalAPagarAbertoMes] = useState(0);
   const [totalAPagarPagasMes, setTotalAPagarPagasMes] = useState(0);
-  const [qtdAbertoMes, setQtdAbertoMes] = useState(0);
-  const [qtdPagasMes, setQtdPagasMes] = useState(0);
   const [aEntrarMes, setAEntrarMes] = useState(0);
-  const [qtdParcelasMes, setQtdParcelasMes] = useState(0);
   const [brutoVendasMes, setBrutoVendasMes] = useState(0);
   const [lucroVendasMes, setLucroVendasMes] = useState(0);
   const [recebidoMes, setRecebidoMes] = useState(0);
-  const [qtdRecebidoMes, setQtdRecebidoMes] = useState(0);
   const [carregandoMes, setCarregandoMes] = useState(false);
   const [carregandoPagar, setCarregandoPagar] = useState(false);
 
@@ -193,16 +182,12 @@ export function StatsCards({
       if (!data) {
         setTotalAPagarAbertoMes(0);
         setTotalAPagarPagasMes(0);
-        setQtdAbertoMes(0);
-        setQtdPagasMes(0);
         setTotalContasPagas(0);
         return;
       }
 
       let abertoMes = 0;
       let pagasMes = 0;
-      let qtdAberto = 0;
-      let qtdPagas = 0;
       let pagasTudo = 0;
 
       for (const c of data) {
@@ -212,7 +197,6 @@ export function StatsCards({
           const ref = c.data_pagamento ?? c.data_vencimento;
           if (ref >= inicio && ref <= fim) {
             pagasMes += valor;
-            qtdPagas += 1;
           }
         } else if (
           c.status === "pendente" &&
@@ -220,14 +204,11 @@ export function StatsCards({
           c.data_vencimento <= fim
         ) {
           abertoMes += valor;
-          qtdAberto += 1;
         }
       }
 
       setTotalAPagarAbertoMes(abertoMes);
       setTotalAPagarPagasMes(pagasMes);
-      setQtdAbertoMes(qtdAberto);
-      setQtdPagasMes(qtdPagas);
       setTotalContasPagas(pagasTudo);
     } finally {
       setCarregandoPagar(false);
@@ -261,17 +242,14 @@ export function StatsCards({
         ]);
 
       let totalEntrar = 0;
-      let qtd = 0;
       for (const p of parcelas ?? []) {
         const saldo = Number(p.valor_parcela) - Number(p.valor_pago ?? 0);
         if (saldo <= 0.001) continue;
         if (p.data_vencimento <= fim) {
           totalEntrar += saldo;
-          qtd += 1;
         }
       }
       setAEntrarMes(totalEntrar);
-      setQtdParcelasMes(qtd);
 
       let bruto = 0;
       let lucro = 0;
@@ -290,7 +268,6 @@ export function StatsCards({
         totalRecebido += Number(p.valor_pago ?? 0);
       }
       setRecebidoMes(totalRecebido);
-      setQtdRecebidoMes(pagamentos?.length ?? 0);
     } finally {
       setCarregandoMes(false);
     }
@@ -406,12 +383,9 @@ export function StatsCards({
 
   const previstoCards: StatItem[] = [
     {
-      title: `A entrar até ${modoFiltro === "mes" ? periodoLabel : formatDate(periodoAtivo.fim)}`,
+      title: `A entrar · ${modoFiltro === "mes" ? periodoLabel : formatDate(periodoAtivo.fim)}`,
       value: formatCurrency(aEntrarMes),
-      description:
-        qtdParcelasMes === 0
-          ? "Nenhuma parcela em aberto até esta data"
-          : `${qtdParcelasMes} parcela${qtdParcelasMes > 1 ? "s" : ""} (período + atrasadas)`,
+      description: "",
       icon: CalendarDays,
       color: "text-green-700",
       bg: "bg-green-50",
@@ -421,7 +395,7 @@ export function StatsCards({
     {
       title: `Vendas · ${periodoLabel}`,
       value: formatCurrency(brutoVendasMes),
-      description: "Total vendido no período",
+      description: "",
       icon: DollarSign,
       color: "text-brand-red",
       bg: "bg-brand-red/10",
@@ -431,7 +405,7 @@ export function StatsCards({
     {
       title: `Lucro · ${periodoLabel}`,
       value: formatCurrency(lucroVendasMes),
-      description: "Venda menos custo no período",
+      description: "",
       icon: TrendingUp,
       color: "text-green-700",
       bg: "bg-green-50",
@@ -448,10 +422,7 @@ export function StatsCards({
     {
       title: "Valor bruto",
       value: formatCurrency(valorBrutoLiquido),
-      description:
-        totalContasPagas > 0
-          ? `Menos contas pagas (${formatCurrency(totalContasPagas)})`
-          : "Estoque a preço de venda",
+      description: "",
       icon: DollarSign,
       color: "text-brand-red",
       bg: "bg-brand-red/10",
@@ -459,9 +430,9 @@ export function StatsCards({
       valueColor: "text-brand-red",
     },
     {
-      title: "Lucro do estoque",
+      title: "Lucro estoque",
       value: formatCurrency(stats.lucroEstimado),
-      description: "Venda menos custo",
+      description: "",
       icon: TrendingUp,
       color: "text-green-700",
       bg: "bg-green-50",
@@ -572,7 +543,7 @@ export function StatsCards({
           )}
         </div>
 
-        <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-1.5">
           {previstoCards.map((item) => (
             <StatCard
               key={item.title}
@@ -582,53 +553,42 @@ export function StatsCards({
           ))}
         </div>
 
-        <div className="mt-2 grid gap-2 grid-cols-1 sm:grid-cols-2">
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5">
           <Card
             className={cn(
-              "overflow-hidden rounded-xl border-l-2 border-l-green-600 bg-gradient-to-br from-white to-brand-cream/25 shadow-sm shadow-brand-black/[0.03]",
+              "overflow-hidden rounded-lg border-l-2 border-l-green-600 bg-white",
               (isLoading || carregandoMes) && "opacity-80"
             )}
           >
-            <div className="space-y-2.5 px-3 py-2.5">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <div className="shrink-0 rounded-lg bg-green-50 p-1.5">
-                  <Wallet className="h-3.5 w-3.5 text-green-700" />
-                </div>
-                <p className="truncate text-[10px] font-medium text-brand-black/55">
-                  Crediário · {periodoLabel}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-brand-red/15 bg-brand-red/[0.04] px-2.5 py-2">
-                  <p className="text-[9px] font-semibold uppercase tracking-wide text-brand-red">
+            <div className="space-y-1 px-2 py-1.5">
+              <p className="truncate text-[9px] font-medium text-brand-black/50">
+                Crediário · {periodoLabel}
+              </p>
+              <div className="grid grid-cols-2 gap-1">
+                <div className="rounded-md bg-brand-red/[0.06] px-1.5 py-1">
+                  <p className="text-[8px] font-semibold uppercase text-brand-red">
                     Em aberto
                   </p>
                   <p
                     className={cn(
-                      "mt-0.5 text-[15px] font-bold tabular-nums tracking-tight text-brand-red",
+                      "text-[12px] font-bold tabular-nums text-brand-red",
                       isLoading && "animate-pulse"
                     )}
                   >
                     {formatCurrency(totalAReceber)}
                   </p>
-                  <p className="text-[9px] text-brand-black/40">A receber</p>
                 </div>
-                <div className="rounded-xl border border-green-200 bg-green-50/80 px-2.5 py-2">
-                  <p className="text-[9px] font-semibold uppercase tracking-wide text-green-700">
+                <div className="rounded-md bg-green-50 px-1.5 py-1">
+                  <p className="text-[8px] font-semibold uppercase text-green-700">
                     Recebido
                   </p>
                   <p
                     className={cn(
-                      "mt-0.5 text-[15px] font-bold tabular-nums tracking-tight text-green-700",
+                      "text-[12px] font-bold tabular-nums text-green-700",
                       (isLoading || carregandoMes) && "animate-pulse"
                     )}
                   >
                     {formatCurrency(recebidoMes)}
-                  </p>
-                  <p className="text-[9px] text-brand-black/40">
-                    {qtdRecebidoMes === 0
-                      ? "No período"
-                      : `${qtdRecebidoMes} no período`}
                   </p>
                 </div>
               </div>
@@ -636,54 +596,39 @@ export function StatsCards({
           </Card>
           <Card
             className={cn(
-              "overflow-hidden rounded-xl border-l-2 border-l-brand-red bg-gradient-to-br from-white to-brand-cream/25 shadow-sm shadow-brand-black/[0.03]",
+              "overflow-hidden rounded-lg border-l-2 border-l-brand-red bg-white",
               (isLoading || carregandoPagar) && "opacity-80"
             )}
           >
-            <div className="space-y-2.5 px-3 py-2.5">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <div className="shrink-0 rounded-lg bg-brand-red/10 p-1.5">
-                  <Receipt className="h-3.5 w-3.5 text-brand-red" />
-                </div>
-                <p className="truncate text-[10px] font-medium text-brand-black/55">
-                  A pagar · {periodoLabel}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-brand-red/15 bg-brand-red/[0.04] px-2.5 py-2">
-                  <p className="text-[9px] font-semibold uppercase tracking-wide text-brand-red">
+            <div className="space-y-1 px-2 py-1.5">
+              <p className="truncate text-[9px] font-medium text-brand-black/50">
+                A pagar · {periodoLabel}
+              </p>
+              <div className="grid grid-cols-2 gap-1">
+                <div className="rounded-md bg-brand-red/[0.06] px-1.5 py-1">
+                  <p className="text-[8px] font-semibold uppercase text-brand-red">
                     Em aberto
                   </p>
                   <p
                     className={cn(
-                      "mt-0.5 text-[15px] font-bold tabular-nums tracking-tight text-brand-red",
+                      "text-[12px] font-bold tabular-nums text-brand-red",
                       (isLoading || carregandoPagar) && "animate-pulse"
                     )}
                   >
                     {formatCurrency(totalAPagarAbertoMes)}
                   </p>
-                  <p className="text-[9px] text-brand-black/40">
-                    {qtdAbertoMes === 0
-                      ? "Nenhuma"
-                      : `${qtdAbertoMes} conta${qtdAbertoMes > 1 ? "s" : ""}`}
-                  </p>
                 </div>
-                <div className="rounded-xl border border-green-200 bg-green-50/80 px-2.5 py-2">
-                  <p className="text-[9px] font-semibold uppercase tracking-wide text-green-700">
+                <div className="rounded-md bg-green-50 px-1.5 py-1">
+                  <p className="text-[8px] font-semibold uppercase text-green-700">
                     Pagas
                   </p>
                   <p
                     className={cn(
-                      "mt-0.5 text-[15px] font-bold tabular-nums tracking-tight text-green-700",
+                      "text-[12px] font-bold tabular-nums text-green-700",
                       (isLoading || carregandoPagar) && "animate-pulse"
                     )}
                   >
                     {formatCurrency(totalAPagarPagasMes)}
-                  </p>
-                  <p className="text-[9px] text-brand-black/40">
-                    {qtdPagasMes === 0
-                      ? "Nenhuma"
-                      : `${qtdPagasMes} conta${qtdPagasMes > 1 ? "s" : ""}`}
                   </p>
                 </div>
               </div>
@@ -692,63 +637,35 @@ export function StatsCards({
         </div>
       </div>
 
-      <div className="border-t border-brand-red/10 pt-3">
+      <div className="border-t border-brand-red/10 pt-2">
         <SectionLabel>Estoque atual</SectionLabel>
 
-        <Card
-          className={cn(
-            "mb-2 overflow-hidden rounded-xl border border-brand-red/15 bg-gradient-to-br from-brand-cream/50 via-white to-white shadow-sm shadow-brand-red/[0.04]",
-            isLoading && "opacity-80"
-          )}
-        >
-          <div className="grid grid-cols-1 divide-y divide-brand-red/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-            <div className="px-3.5 py-3.5">
-              <div className="mb-2 flex items-center gap-1.5">
-                <div className="rounded-md bg-brand-cream p-1.5">
-                  <Package className="h-3.5 w-3.5 text-brand-black" />
-                </div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-black/55">
-                  Preço de custo
-                </p>
-              </div>
-              <p
-                className={cn(
-                  "text-xl font-bold tabular-nums tracking-tight text-brand-black sm:text-2xl",
-                  isLoading && "animate-pulse"
-                )}
-              >
-                {formatCurrency(stats.totalCusto)}
-              </p>
-              <p className="mt-1 text-[10px] text-brand-black/40">
-                Investido no estoque
-              </p>
-            </div>
-
-            <div className="bg-brand-red/[0.03] px-3.5 py-3.5">
-              <div className="mb-2 flex items-center gap-1.5">
-                <div className="rounded-md bg-brand-red/10 p-1.5">
-                  <DollarSign className="h-3.5 w-3.5 text-brand-red" />
-                </div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-red">
-                  Preço de venda
-                </p>
-              </div>
-              <p
-                className={cn(
-                  "text-xl font-bold tabular-nums tracking-tight text-brand-red sm:text-2xl",
-                  isLoading && "animate-pulse"
-                )}
-              >
-                {formatCurrency(valorBrutoEstoque)}
-              </p>
-              <p className="mt-1 text-[10px] text-brand-black/40">
-                Se vender o estoque
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          <StatCard
+            item={{
+              title: "Custo",
+              value: formatCurrency(stats.totalCusto),
+              description: "",
+              icon: Package,
+              color: "text-brand-black",
+              bg: "bg-brand-cream",
+              accent: "border-l-brand-black",
+            }}
+            isLoading={isLoading}
+          />
+          <StatCard
+            item={{
+              title: "Preço venda",
+              value: formatCurrency(valorBrutoEstoque),
+              description: "",
+              icon: DollarSign,
+              color: "text-brand-red",
+              bg: "bg-brand-red/10",
+              accent: "border-l-brand-red",
+              valueColor: "text-brand-red",
+            }}
+            isLoading={isLoading}
+          />
           {estoqueResumoCards.map((item) => (
             <StatCard
               key={item.title}
