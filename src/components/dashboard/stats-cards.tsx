@@ -313,7 +313,7 @@ export function StatsCards({
       : labelPeriodo(periodoAtivo.inicio, periodoAtivo.fim);
 
   const custoVendasMes = Math.max(0, brutoVendasMes - lucroVendasMes);
-  const liquidoMes = lucroVendasMes - totalAPagarPagasMes;
+  const liquidoMes = lucroVendasMes;
 
   const valorBrutoEstoque = stats.totalVenda;
 
@@ -453,14 +453,14 @@ export function StatsCards({
         <Card
           className={cn(
             "overflow-hidden rounded-lg border-l-2 border-l-brand-red bg-white",
-            (isLoading || carregandoMes || carregandoPagar) && "opacity-80"
+            (isLoading || carregandoMes) && "opacity-80"
           )}
         >
           <div className="space-y-1.5 px-2 py-1.5">
             <p className="text-[9px] font-medium text-brand-black/50">
-              Vendas − custo − pagas = líquido · {periodoLabel}
+              Vendas − custo = líquido · {periodoLabel}
             </p>
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <div className="grid grid-cols-3 gap-1.5">
               <div className="rounded-md bg-brand-red/[0.06] px-1.5 py-1.5">
                 <p className="text-[8px] font-semibold uppercase text-brand-red">
                   Vendas
@@ -487,19 +487,6 @@ export function StatsCards({
                   {formatCurrency(custoVendasMes)}
                 </p>
               </div>
-              <div className="rounded-md bg-brand-cream px-1.5 py-1.5">
-                <p className="text-[8px] font-semibold uppercase text-brand-black/60">
-                  (−) Pagas
-                </p>
-                <p
-                  className={cn(
-                    "text-[13px] font-bold tabular-nums text-brand-black",
-                    (isLoading || carregandoPagar) && "animate-pulse"
-                  )}
-                >
-                  {formatCurrency(totalAPagarPagasMes)}
-                </p>
-              </div>
               <div className="rounded-md bg-green-50 px-1.5 py-1.5">
                 <p className="text-[8px] font-semibold uppercase text-green-700">
                   (=) Líquido
@@ -508,8 +495,7 @@ export function StatsCards({
                   className={cn(
                     "text-[13px] font-bold tabular-nums",
                     liquidoMes < 0 ? "text-brand-red" : "text-green-700",
-                    (isLoading || carregandoMes || carregandoPagar) &&
-                      "animate-pulse"
+                    (isLoading || carregandoMes) && "animate-pulse"
                   )}
                 >
                   {formatCurrency(liquidoMes)}
