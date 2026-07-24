@@ -314,6 +314,7 @@ export function StatsCards({
 
   const custoVendasMes = Math.max(0, brutoVendasMes - lucroVendasMes);
   const liquidoMes = lucroVendasMes;
+  const caixaMes = recebidoMes - totalAPagarPagasMes;
 
   const valorBrutoEstoque = stats.totalVenda;
 
@@ -587,6 +588,62 @@ export function StatsCards({
             </div>
           </Card>
         </div>
+
+        <Card
+          className={cn(
+            "mt-1.5 overflow-hidden rounded-md border-l-2 border-l-green-700 bg-white",
+            (isLoading || carregandoMes || carregandoPagar) && "opacity-80"
+          )}
+        >
+          <div className="space-y-0.5 px-1.5 py-1">
+            <p className="truncate text-[8px] font-medium text-brand-black/50">
+              Caixa · recebido − pagas · {periodoLabel}
+            </p>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center justify-between gap-1 rounded bg-green-50 px-1 py-0.5">
+                <span className="text-[7px] font-semibold uppercase text-green-700">
+                  Recebido
+                </span>
+                <span
+                  className={cn(
+                    "text-[10px] font-bold tabular-nums text-green-700",
+                    (isLoading || carregandoMes) && "animate-pulse"
+                  )}
+                >
+                  {formatCurrency(recebidoMes)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-1 rounded bg-brand-cream px-1 py-0.5">
+                <span className="text-[7px] font-semibold uppercase text-brand-black/60">
+                  (−) Pagas
+                </span>
+                <span
+                  className={cn(
+                    "text-[10px] font-bold tabular-nums text-brand-black",
+                    (isLoading || carregandoPagar) && "animate-pulse"
+                  )}
+                >
+                  {formatCurrency(totalAPagarPagasMes)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-1 rounded bg-green-100 px-1 py-0.5">
+                <span className="text-[7px] font-semibold uppercase text-green-800">
+                  (=) Caixa
+                </span>
+                <span
+                  className={cn(
+                    "text-[11px] font-bold tabular-nums",
+                    caixaMes < 0 ? "text-brand-red" : "text-green-800",
+                    (isLoading || carregandoMes || carregandoPagar) &&
+                      "animate-pulse"
+                  )}
+                >
+                  {formatCurrency(caixaMes)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </Card>
       </div>
 
       <div className="border-t border-brand-red/10 pt-2">
