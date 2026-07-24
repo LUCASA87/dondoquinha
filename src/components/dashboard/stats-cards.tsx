@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { FileDown, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAppMessages } from "@/components/ui/app-messages";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatDate, formatMesAno } from "@/lib/format";
+import { baixarRelatorioDashboardPDF } from "@/lib/relatorio-dashboard-pdf";
 import { cn } from "@/lib/utils";
 import type { DashboardStats } from "@/types/database";
 
@@ -61,6 +65,7 @@ export function StatsCards({
   initialStats,
   isLoading = false,
 }: StatsCardsProps) {
+  const { toast } = useAppMessages();
   const [stats, setStats] = useState(initialStats);
   const [totalAReceber, setTotalAReceber] = useState(0);
   const [modoFiltro, setModoFiltro] = useState<ModoFiltroFinanceiro>("mes");
@@ -73,6 +78,7 @@ export function StatsCards({
   const [brutoVendasMes, setBrutoVendasMes] = useState(0);
   const [lucroVendasMes, setLucroVendasMes] = useState(0);
   const [recebidoMes, setRecebidoMes] = useState(0);
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
   const [carregandoMes, setCarregandoMes] = useState(false);
   const [carregandoPagar, setCarregandoPagar] = useState(false);
 
@@ -318,6 +324,39 @@ export function StatsCards({
 
   const valorBrutoEstoque = stats.totalVenda;
 
+  async function gerarRelatorioPDF() {
+    const { inicio, fim } = periodoAtivo;
+    if (!inicio || !fim) {
+      toast("Escolha um mês ou período válido.", "error");
+      return;
+    }
+
+    setGerandoRelatorio(true);
+    try {
+      await baixarRelatorioDashboardPDF({
+        periodoLabel,
+        dataInicio: inicio,
+        dataFim: fim,
+        vendas: brutoVendasMes,
+        custo: custoVendasMes,
+        liquido: liquidoMes,
+        crediarioAberto: totalAReceber,
+        crediarioRecebido: recebidoMes,
+        aPagarAberto: totalAPagarAbertoMes,
+        aPagarPagas: totalAPagarPagasMes,
+        caixa: caixaMes,
+        estoqueCusto: stats.totalCusto,
+        estoquePrecoVenda: valorBrutoEstoque,
+        estoqueLucro: stats.lucroEstimado,
+      });
+      toast("PDF do relatório baixado.", "success");
+    } catch {
+      toast("Não foi possível gerar o PDF.", "error");
+    } finally {
+      setGerandoRelatorio(false);
+    }
+  }
+
   const estoqueLinhas = [
     {
       label: "Custo",
@@ -393,62 +432,82 @@ export function StatsCards({
             </div>
           </div>
 
-          {modoFiltro === "mes" ? (
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Label
-                htmlFor="filtro_mes_entrar"
-                className="text-[10px] font-medium text-brand-black/55"
-              >
-                Mês
-              </Label>
-              <Input
-                id="filtro_mes_entrar"
-                type="month"
-                value={mesFiltro}
-                onChange={(e) => {
-                  const valor = e.target.value;
-                  setMesFiltro(valor);
-                  const { inicio, fim } = intervaloDoMes(valor);
-                  setDataInicio(inicio);
-                  setDataFim(fim);
-                }}
-                className="h-8 w-[9.5rem] px-2 text-xs"
-              />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div className="space-y-1">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+            {modoFiltro === "mes" ? (
+              <div className="flex flex-wrap items-center gap-2">
                 <Label
-                  htmlFor="filtro_data_inicio"
+                  htmlFor="filtro_mes_entrar"
                   className="text-[10px] font-medium text-brand-black/55"
                 >
-                  De
+                  Mês
                 </Label>
                 <Input
-                  id="filtro_data_inicio"
-                  type="date"
-                  value={dataInicio}
-                  onChange={(e) => setDataInicio(e.target.value)}
-                  className="h-8 px-2 text-xs"
+                  id="filtro_mes_entrar"
+                  type="month"
+                  value={mesFiltro}
+                  onChange={(e) => {
+                    const valor = e.target.value;
+                    setMesFiltro(valor);
+                    const { inicio, fim } = intervaloDoMes(valor);
+                    setDataInicio(inicio);
+                    setDataFim(fim);
+                  }}
+                  className="h-8 w-[9.5rem] px-2 text-xs"
                 />
               </div>
-              <div className="space-y-1">
-                <Label
-                  htmlFor="filtro_data_fim"
-                  className="text-[10px] font-medium text-brand-black/55"
-                >
-                  Até
-                </Label>
-                <Input
-                  id="filtro_data_fim"
-                  type="date"
-                  value={dataFim}
-                  onChange={(e) => setDataFim(e.target.value)}
-                  className="h-8 px-2 text-xs"
-                />
+            ) : (
+              <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="filtro_data_inicio"
+                    className="text-[10px] font-medium text-brand-black/55"
+                  >
+                    De
+                  </Label>
+                  <Input
+                    id="filtro_data_inicio"
+                    type="date"
+                    value={dataInicio}
+                    onChange={(e) => setDataInicio(e.target.value)}
+                    className="h-8 px-2 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="filtro_data_fim"
+                    className="text-[10px] font-medium text-brand-black/55"
+                  >
+                    Até
+                  </Label>
+                  <Input
+                    id="filtro_data_fim"
+                    type="date"
+                    value={dataFim}
+                    onChange={(e) => setDataFim(e.target.value)}
+                    className="h-8 px-2 text-xs"
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            )}
+
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 shrink-0 touch-manipulation gap-1.5 text-xs"
+              disabled={
+                gerandoRelatorio || isLoading || carregandoMes || carregandoPagar
+              }
+              onClick={() => void gerarRelatorioPDF()}
+            >
+              {gerandoRelatorio ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileDown className="h-3.5 w-3.5" />
+              )}
+              Relatório
+            </Button>
+          </div>
         </div>
 
         <Card
