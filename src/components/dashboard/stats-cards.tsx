@@ -59,11 +59,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function StatsCards({
   initialStats,
-  totalAReceber: initialAReceber,
   isLoading = false,
 }: StatsCardsProps) {
   const [stats, setStats] = useState(initialStats);
-  const [totalAReceber, setTotalAReceber] = useState(initialAReceber);
+  const [totalAReceber, setTotalAReceber] = useState(0);
   const [modoFiltro, setModoFiltro] = useState<ModoFiltroFinanceiro>("mes");
   const [mesFiltro, setMesFiltro] = useState(mesAtualInput);
   const mesPadrao = intervaloDoMes(mesAtualInput());
@@ -100,14 +99,23 @@ export function StatsCards({
     });
   }, []);
 
-  const fetchAReceber = useCallback(async () => {
+  const fetchAReceberPeriodo = useCallback(async (inicioRaw: string, fimRaw: string) => {
+    const { inicio, fim } = normalizarIntervalo(inicioRaw, fimRaw);
+    if (!inicio || !fim) return;
+
     const supabase = createClient();
     const { data } = await supabase
       .from("parcelas_vendas")
-      .select("valor_parcela, valor_pago");
+      .select("valor_parcela, valor_pago, data_vencimento")
+      .gte("data_vencimento", inicio)
+      .lte("data_vencimento", fim);
 
-    if (!data) return;
+    if (!data) {
+      setTotalAReceber(0);
+      return;
+    }
 
+    // Só parcelas com vencimento no mês/período (saldo em aberto).
     const total = data.reduce((sum, p) => {
       const saldo = Number(p.valor_parcela) - Number(p.valor_pago ?? 0);
       return sum + (saldo > 0.001 ? saldo : 0);
@@ -208,10 +216,6 @@ export function StatsCards({
     setStats(initialStats);
   }, [initialStats]);
 
-  useEffect(() => {
-    setTotalAReceber(initialAReceber);
-  }, [initialAReceber]);
-
   const intervaloAtivo = useCallback(() => {
     if (modoFiltro === "mes") return intervaloDoMes(mesFiltro);
     return normalizarIntervalo(dataInicio, dataFim);
@@ -221,7 +225,8 @@ export function StatsCards({
     const { inicio, fim } = intervaloAtivo();
     void fetchResumoPeriodo(inicio, fim);
     void fetchAPagarPeriodo(inicio, fim);
-  }, [intervaloAtivo, fetchResumoPeriodo, fetchAPagarPeriodo]);
+    void fetchAReceberPeriodo(inicio, fim);
+  }, [intervaloAtivo, fetchResumoPeriodo, fetchAPagarPeriodo, fetchAReceberPeriodo]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -230,6 +235,7 @@ export function StatsCards({
       const { inicio, fim } = intervaloAtivo();
       void fetchResumoPeriodo(inicio, fim);
       void fetchAPagarPeriodo(inicio, fim);
+      void fetchAReceberPeriodo(inicio, fim);
     };
 
     const channelEstoque = supabase
@@ -246,10 +252,7 @@ export function StatsCards({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "parcelas_vendas" },
-        () => {
-          fetchAReceber();
-          refreshMes();
-        }
+        refreshMes
       )
       .subscribe();
 
@@ -258,10 +261,7 @@ export function StatsCards({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "pagamentos_crediario" },
-        () => {
-          fetchAReceber();
-          refreshMes();
-        }
+        refreshMes
       )
       .subscribe();
 
@@ -300,7 +300,7 @@ export function StatsCards({
     };
   }, [
     fetchEstoque,
-    fetchAReceber,
+    fetchAReceberPeriodo,
     fetchAPagarPeriodo,
     fetchResumoPeriodo,
     intervaloAtivo,
@@ -525,7 +525,7 @@ export function StatsCards({
                   <span
                     className={cn(
                       "text-[10px] font-bold tabular-nums text-brand-red",
-                      isLoading && "animate-pulse"
+                      (isLoading || carregandoMes) && "animate-pulse"
                     )}
                   >
                     {formatCurrency(totalAReceber)}
